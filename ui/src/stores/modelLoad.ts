@@ -36,8 +36,14 @@ export function isPending(id: string): boolean {
 }
 
 export function onToggleLoad(m: Model): void {
-  if (m.state === "stopped" && isPending(m.id)) {
+  const loading = m.state === "starting" || (m.state === "stopped" && isPending(m.id));
+  if (loading) {
+    // Cancel a load in progress. Aborting the client request alone does not stop
+    // the swap — FIFO.OnCancel deliberately leaves a sole-waiter swap running —
+    // so also call the unload API, which actually stops the (multi-minute)
+    // starting process and releases the resident model it was evicting.
     cancelLoad(m.id);
+    void unloadSingleModel(m.id);
   } else if (m.state === "stopped") {
     void handleLoadModel(m.id);
   } else if (m.state === "ready") {
