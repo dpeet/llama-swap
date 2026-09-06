@@ -101,6 +101,7 @@ type nvidiaRecord struct {
 	uuid         string
 	busID        string
 	architecture string
+	computeCap   string
 	memoryBytes  uint64
 	driver       string
 	powerLimit   float64
@@ -125,11 +126,12 @@ func detectNvidia(ctx context.Context, snapshot *HardwareSnapshot) ([]detectedAc
 	if architectureErr == nil {
 		applyNvidiaArchitectures(records, string(architectureOutput))
 	}
-	if hasMissingNvidiaArchitecture(records) {
-		computeOutput, computeErr := exec.CommandContext(ctx, "nvidia-smi", "--query-gpu=index,compute_cap", "--format=csv,noheader,nounits").Output()
-		if computeErr == nil {
-			applyNvidiaComputeCapabilities(records, string(computeOutput))
-		}
+	// Always query compute_cap (not just when architecture is missing): it is the
+	// only signal that distinguishes GB10 (sm_121) unified memory from discrete
+	// Blackwell, and nvidia-smi reports "Blackwell" as the architecture for both.
+	computeOutput, computeErr := exec.CommandContext(ctx, "nvidia-smi", "--query-gpu=index,compute_cap", "--format=csv,noheader,nounits").Output()
+	if computeErr == nil {
+		applyNvidiaComputeCapabilities(records, string(computeOutput))
 	}
 
 	result := make([]detectedAccelerator, 0, len(records))
@@ -229,6 +231,7 @@ func applyNvidiaArchitectures(records []nvidiaRecord, output string) {
 
 func applyNvidiaComputeCapabilities(records []nvidiaRecord, output string) {
 	applyNvidiaIndexedValues(records, output, func(record *nvidiaRecord, value string) {
+		record.computeCap = value
 		if record.architecture == "" {
 			record.architecture = nvidiaArchitectureForComputeCapability(value)
 		}
@@ -257,15 +260,6 @@ func applyNvidiaIndexedValues(records []nvidiaRecord, output string, apply func(
 			apply(record, value)
 		}
 	}
-}
-
-func hasMissingNvidiaArchitecture(records []nvidiaRecord) bool {
-	for i := range records {
-		if records[i].architecture == "" {
-			return true
-		}
-	}
-	return false
 }
 
 func nvidiaArchitectureForComputeCapability(value string) string {

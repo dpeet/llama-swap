@@ -79,3 +79,23 @@ func TestParseRocmSmiLine_InvalidLines(t *testing.T) {
 		})
 	}
 }
+
+func TestIsUnifiedMemoryGpu(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"NVIDIA GB10", true},
+		{"NVIDIA GH200 480GB", true},
+		{"Orin", true},         // case-insensitive substring
+		{"nvidia gb200", true}, // lowercase
+		{"NVIDIA GeForce RTX 4090", false},
+		{"NVIDIA A100-SXM4-80GB", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isUnifiedMemoryGpu(tt.name))
+		})
+	}
+}
