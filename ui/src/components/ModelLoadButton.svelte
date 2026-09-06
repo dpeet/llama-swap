@@ -13,22 +13,26 @@
 
   let btnSize = $derived(size === "sm" ? "size-5 rounded-sm" : "size-7 rounded-md");
   let iconSize = $derived(size === "sm" ? "size-3.5" : "size-4");
-  let busy = $derived(model.state === "starting" || model.state === "stopping");
+  // A load in progress (starting, or a just-fired request still pending) stays
+  // clickable so the operator can cancel it — cancelling a multi-minute remote
+  // load is the whole point. Only an unload in progress (stopping) is inert.
+  let loading = $derived(model.state === "starting" || ($pendingLoads[model.id] && model.state === "stopped"));
+  let stopping = $derived(model.state === "stopping");
 </script>
 
 <button
   type="button"
   class="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex {btnSize} shrink-0 items-center justify-center disabled:opacity-50"
-  title={model.state === "ready" ? "Unload" : $pendingLoads[model.id] ? "Cancel" : "Load"}
-  aria-label={model.state === "ready" ? "Unload model" : "Load model"}
-  disabled={busy}
+  title={model.state === "ready" ? "Unload" : loading ? "Cancel" : "Load"}
+  aria-label={model.state === "ready" ? "Unload model" : loading ? "Cancel load" : "Load model"}
+  disabled={stopping}
   onclick={() => onToggleLoad(model)}
 >
-  {#if $pendingLoads[model.id] && model.state === "stopped"}
+  {#if loading}
     <Loader2 class="{iconSize} animate-spin" />
   {:else if model.state === "ready"}
     <PowerOff class={iconSize} />
-  {:else if busy}
+  {:else if stopping}
     <Loader2 class="{iconSize} animate-spin" />
   {:else}
     <Play class={iconSize} />
