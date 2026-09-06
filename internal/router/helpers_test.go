@@ -72,6 +72,7 @@ type fakeProcess struct {
 
 	runCalls     atomic.Int32
 	stopCalls    atomic.Int32
+	detachCalls  atomic.Int32
 	serveCalls   atomic.Int32
 	stopTimeouts []time.Duration
 
@@ -202,6 +203,13 @@ func (f *fakeProcess) Stop(timeout time.Duration) error {
 		close(f.stopCh)
 	}
 	return nil
+}
+
+// Detach records the call and otherwise tears down like Stop, so router tests
+// can assert shutdown chose detach over stop for a detach-configured model.
+func (f *fakeProcess) Detach(timeout time.Duration) error {
+	f.detachCalls.Add(1)
+	return f.Stop(timeout)
 }
 
 func (f *fakeProcess) lastStopTimeout() time.Duration {

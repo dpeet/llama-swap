@@ -172,6 +172,27 @@ func tryNvidiaSmi(ctx context.Context, every time.Duration, logger *logmon.Monit
 
 			stat := ParseNvidiaSmiLine(line)
 			if stat != nil {
+				if stat.MemTotalMB == 0 && isUnifiedMemoryGpu(stat.Name) {
+					// Unified-memory GPUs (e.g. NVIDIA GB10/Grace-Blackwell) have no
+					// dedicated framebuffer, so nvidia-smi reports memory.used/memory.total
+					// as N/A. System RAM total is the real ceiling on these platforms;
+					// sum per-process GPU memory for a used figure that reflects actual
+					// CUDA allocations rather than unrelated host memory/cache usage.
+					// Restricted to known unified-memory SKUs so a discrete GPU that
+					// transiently fails to report memory isn't silently swapped for
+					// system RAM stats.
+					if vmStat, err := mem.VirtualMemory(); err == nil {
+						const toMB = 1024 * 1024
+						stat.MemTotalMB = int(vmStat.Total / toMB)
+						stat.MemUsedMB = int(vmStat.Used / toMB)
+					}
+					if used, ok := sumNvidiaComputeAppsMemMB(ctx, stat.UUID); ok {
+						stat.MemUsedMB = used
+					}
+					if stat.MemTotalMB > 0 {
+						stat.MemUtilPct = float64(stat.MemUsedMB) / float64(stat.MemTotalMB) * 100
+					}
+				}
 				select {
 				case ch <- []GpuStat{*stat}:
 				default:
@@ -182,6 +203,60 @@ func tryNvidiaSmi(ctx context.Context, every time.Duration, logger *logmon.Monit
 	}()
 
 	return ch, nil
+}
+
+// unifiedMemoryGpuNames matches NVIDIA GPU/SoC names known to share system RAM
+// instead of having a dedicated framebuffer: Grace-Blackwell/Grace-Hopper
+// superchips and Jetson/Tegra boards.
+var unifiedMemoryGpuNames = []string{"GB10", "GB200", "GB300", "GH200", "JETSON", "TEGRA", "ORIN", "THOR", "XAVIER"}
+
+func isUnifiedMemoryGpu(name string) bool {
+	upper := strings.ToUpper(name)
+	for _, n := range unifiedMemoryGpuNames {
+		if strings.Contains(upper, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// sumNvidiaComputeAppsMemMB sums per-process GPU memory (MB) reported by
+// nvidia-smi for the given GPU UUID. Used as a memory.used fallback on
+// unified-memory GPUs, where the aggregate memory.used/memory.total fields are
+// unavailable. Scoping by gpu_uuid keeps the figure correct on a multi-GPU host
+// (the PR's open review nit); malformed rows are skipped rather than aborting
+// the sum. Returns ok=true whenever the query itself succeeded, so zero running
+// compute apps correctly reports zero GPU memory used.
+func sumNvidiaComputeAppsMemMB(ctx context.Context, gpuUUID string) (int, bool) {
+	pollCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	out, err := exec.CommandContext(pollCtx, "nvidia-smi",
+		"--query-compute-apps=gpu_uuid,used_memory",
+		"--format=csv,noheader,nounits",
+	).Output()
+	if err != nil {
+		return 0, false
+	}
+
+	total := 0
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		uuid, memStr, ok := strings.Cut(line, ",")
+		if !ok {
+			continue // malformed row: missing the gpu_uuid,used_memory split
+		}
+		if gpuUUID != "" && strings.TrimSpace(uuid) != gpuUUID {
+			continue // a process on another GPU
+		}
+		if v, err := strconv.Atoi(strings.TrimSpace(memStr)); err == nil {
+			total += v
+		}
+	}
+	return total, true
 }
 
 func tryRocmSmi(ctx context.Context, every time.Duration, logger *logmon.Monitor) (chan []GpuStat, error) {
