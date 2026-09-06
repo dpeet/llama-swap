@@ -260,3 +260,109 @@ func killChildFromPidFile(pidFile string) {
 	}
 	_ = proc.Kill()
 }
+
+// TestProcessCommand_DetachDuringStartupSkipsCmdStop is the regression for the
+// review finding that a detach-configured model caught mid-start (health still
+// failing) fell through doStart's abort() path, which hardcoded detach=false and
+// ran CmdStop — tearing down the neighbor container it was meant to preserve.
+// The cmd starts and stays alive but never serves health (proxy → a dead port),
+// so the process is stuck StateStarting when Detach lands; CmdStop touches a
+// marker so we can prove it did NOT run.
+func TestProcessCommand_DetachDuringStartupSkipsCmdStop(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "cmdstop.ran")
+	script := filepath.Join(dir, "run.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/bash\nexec sleep 300\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	deadPort := getFreePort(t) // nothing listens here → health check never passes
+	p := newProcessCommand(t, config.ModelConfig{
+		Cmd:                script,
+		Proxy:              fmt.Sprintf("http://127.0.0.1:%d", deadPort),
+		CheckEndpoint:      "/health",
+		HealthCheckTimeout: 30, // long enough to stay StateStarting while we Detach
+		CmdStop:            fmt.Sprintf("touch %s", marker),
+	})
+	p.waitDelay = 250 * time.Millisecond
+
+	runErr := make(chan error, 1)
+	go func() { runErr <- p.Run(30 * time.Second) }()
+
+	// Wait until the process is health-checking (StateStarting), not ready.
+	deadline := time.Now().Add(3 * time.Second)
+	for p.State() != StateStarting {
+		if time.Now().After(deadline) {
+			t.Fatalf("process never reached StateStarting, got %s", p.State())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if err := p.Detach(testStopTimeout); err != nil {
+		t.Fatalf("Detach: %v", err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("CmdStop ran during a detach-in-startup — the neighbor container would have been torn down")
+	}
+	if got := p.State(); got != StateStopped {
+		t.Errorf("after Detach: state = %s, want stopped", got)
+	}
+	select {
+	case <-runErr:
+	case <-time.After(testReturnTimeout):
+		t.Error("Run did not return after Detach")
+	}
+}
+
+// TestProcessCommand_StopDuringStartupRunsCmdStop is the companion: a plain Stop
+// (not Detach) mid-start MUST still run CmdStop to free the half-started model.
+func TestProcessCommand_StopDuringStartupRunsCmdStop(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "cmdstop.ran")
+	script := filepath.Join(dir, "run.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/bash\nexec sleep 300\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	deadPort := getFreePort(t)
+	p := newProcessCommand(t, config.ModelConfig{
+		Cmd:                script,
+		Proxy:              fmt.Sprintf("http://127.0.0.1:%d", deadPort),
+		CheckEndpoint:      "/health",
+		HealthCheckTimeout: 30,
+		CmdStop:            fmt.Sprintf("touch %s", marker),
+	})
+	p.waitDelay = 250 * time.Millisecond
+
+	runErr := make(chan error, 1)
+	go func() { runErr <- p.Run(30 * time.Second) }()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for p.State() != StateStarting {
+		if time.Now().After(deadline) {
+			t.Fatalf("process never reached StateStarting, got %s", p.State())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if err := p.Stop(testStopTimeout); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	// CmdStop must have run (marker present) within a brief settle window.
+	ran := false
+	for i := 0; i < 100; i++ {
+		if _, err := os.Stat(marker); err == nil {
+			ran = true
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !ran {
+		t.Fatal("CmdStop did not run during a plain Stop-in-startup")
+	}
+	select {
+	case <-runErr:
+	case <-time.After(testReturnTimeout):
+		t.Error("Run did not return after Stop")
+	}
+}

@@ -512,6 +512,18 @@ func buildMetrics(modelID string, start time.Time, inputTokens, outputTokens, ca
 		tokensPerSecond = 1000 / meanInterTokenLatency.Float()
 	}
 
+	// SGLang and other OpenAI-compatible backends emit only a `usage` block — no
+	// llama.cpp `timings`, no vLLM `metrics` object — so tokensPerSecond stays -1
+	// and the /ui speed column reads "unknown". Fall back to the end-to-end
+	// effective generation rate from the token count and wall duration already
+	// recorded. This includes prefill + queue time, so it is lower than
+	// pure-decode ITL — honest and directional, not a decode benchmark. Prompt
+	// rate is left unknown because a usage-only response carries no
+	// prefill-vs-decode split to derive it from.
+	if tokensPerSecond < 0 && outputTokens > 0 && durationMs > 0 {
+		tokensPerSecond = float64(outputTokens) / (float64(durationMs) / 1000)
+	}
+
 	return ActivityLogEntry{
 		Timestamp: time.Now(),
 		Model:     modelID,

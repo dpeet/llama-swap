@@ -241,14 +241,19 @@ func (b *baseRouter) trackedServe(modelID string, p process.Process) http.Handle
 }
 
 func (b *baseRouter) doSwap(modelID string, toStop []string) {
-	timeout := b.healthCheckTimeout()
-
+	// Evicted models use their configured unloadTimeout; the incoming target
+	// uses the (longer) cold-start healthCheckTimeout for its load. Previously
+	// both used healthCheckTimeout, so a stuck `docker stop` blocked the whole
+	// swap for the full health window and the documented unloadTimeout was
+	// silently ignored on the swap path (docs/kb/guides/model-runtime/
+	// ttl-and-unloading.md: unloadTimeout "applies to every unload — TTL
+	// expiry, a manual unload, or a swap").
 	var wg sync.WaitGroup
 	for _, mID := range toStop {
 		wg.Add(1)
 		go func(p process.Process, id string) {
 			defer wg.Done()
-			if err := p.Stop(timeout); err != nil {
+			if err := p.Stop(b.unloadTimeout(id)); err != nil {
 				b.logger.Warnf("%s: stopping %s failed: %v", b.name, id, err)
 			}
 		}(b.processes[mID], mID)
@@ -262,7 +267,7 @@ func (b *baseRouter) doSwap(modelID string, toStop []string) {
 	// process nobody was ever going to start (issue #946). EnsureReady makes
 	// the same decision inside the process, where the state is owned.
 	target := b.processes[modelID]
-	err := target.EnsureReady(b.shutdownCtx, timeout)
+	err := target.EnsureReady(b.shutdownCtx, b.healthCheckTimeout())
 	if err != nil && b.shutdownCtx.Err() == nil {
 		// Quiet during shutdown: every in-flight swap fails at once there, and
 		// that is expected rather than worth a warning per model.
@@ -299,7 +304,17 @@ func (b *baseRouter) handleShutdown(req shutdownReq) {
 		wg.Add(1)
 		go func(id string, p process.Process) {
 			defer wg.Done()
-			if err := p.Stop(stopTimeout); err != nil {
+			// Detach (skip CmdStop, leave the upstream container running) for
+			// models configured that way, so a neighbor container survives
+			// llama-swap's own shutdown/reload; adopt re-attaches on start.
+			// Swaps and TTL unloads still go through Stop, which frees memory.
+			var err error
+			if b.detachOnShutdown(id) {
+				err = p.Detach(stopTimeout)
+			} else {
+				err = p.Stop(stopTimeout)
+			}
+			if err != nil {
 				b.logger.Warnf("%s failed to stop process %s: %v", b.name, id, err)
 			}
 		}(i, p)
@@ -346,6 +361,13 @@ func (b *baseRouter) unloadTimeout(modelID string) time.Duration {
 		return time.Duration(mc.UnloadTimeout) * time.Second
 	}
 	return time.Duration(b.config.UnloadTimeout) * time.Second
+}
+
+// detachOnShutdown reports whether the model should be detached (upstream left
+// running, CmdStop skipped) rather than stopped when llama-swap shuts down.
+func (b *baseRouter) detachOnShutdown(modelID string) bool {
+	mc, ok := b.config.Models[modelID]
+	return ok && mc.DetachOnShutdown
 }
 
 func (b *baseRouter) Handles(model string) bool {

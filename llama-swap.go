@@ -288,6 +288,11 @@ func main() {
 		proxyLog.Infof("Tailcat listening on virtual TCP port 80: %s", activeTailcat.Address())
 	}
 
+	// Adopt already-running upstreams for the INITIAL server only (never on
+	// reload — see Server.StartAdopt). Background goroutine; safe once routes
+	// are wired (done in server.New).
+	initialSrv.StartAdopt()
+
 	httpServer := &http.Server{
 		Addr: listenAddr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

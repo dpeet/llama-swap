@@ -116,13 +116,22 @@ func TestHardware_NvidiaComputeCapabilityArchitectures(t *testing.T) {
 		{index: 1, name: "Tesla P40"},
 		{index: 2, name: "NVIDIA GeForce RTX 3090"},
 		{index: 3, name: "NVIDIA GeForce RTX 3090", architecture: "Ampere"},
+		{index: 4, name: "NVIDIA GB10"},
 	}
-	applyNvidiaComputeCapabilities(records, "0, 6.1\n1, 6.1\n2, 8.6\n3, 8.6\n")
+	applyNvidiaComputeCapabilities(records, "0, 6.1\n1, 6.1\n2, 8.6\n3, 8.6\n4, 12.1\n")
 
-	want := []string{"Pascal", "Pascal", "Ampere", "Ampere"}
+	want := []string{"Pascal", "Pascal", "Ampere", "Ampere", "Blackwell"}
 	for i := range records {
 		if records[i].architecture != want[i] {
 			t.Errorf("records[%d].architecture = %q, want %q", i, records[i].architecture, want[i])
+		}
+	}
+	// compute_cap is now retained on every record (not just architecture-missing
+	// ones) so detectNvidia can flag the GB10 (12.1) unified-memory device.
+	wantCap := []string{"6.1", "6.1", "8.6", "8.6", "12.1"}
+	for i := range records {
+		if records[i].computeCap != wantCap[i] {
+			t.Errorf("records[%d].computeCap = %q, want %q", i, records[i].computeCap, wantCap[i])
 		}
 	}
 }

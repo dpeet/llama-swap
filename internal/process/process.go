@@ -55,6 +55,13 @@ type Process interface {
 	// the process terminated as expected (exit 0)
 	Stop(timeout time.Duration) error
 
+	// Detach is like Stop but skips CmdStop: it signals only llama-swap's own
+	// supervisor process (and its group), leaving a detached upstream — a
+	// neighbor container the cmd started with `docker compose up -d; exec docker
+	// wait <ctr>` — running. Used for llama-swap's own shutdown/reload so such a
+	// container survives a restart; swaps and TTL unloads use Stop instead.
+	Detach(timeout time.Duration) error
+
 	// State returns the current state of the process
 	// Note: this is a snapshot of the state at the time of the call
 	// and may change at any time after the call returns.

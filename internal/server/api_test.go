@@ -1085,3 +1085,24 @@ func anySliceStrEqual(v any, want []string) bool {
 	}
 	return true
 }
+
+func TestServer_AdoptEligibleModels(t *testing.T) {
+	models := map[string]config.ModelConfig{
+		"sglang-a":  {Proxy: "http://127.0.0.1:30000", CheckEndpoint: "/health"},
+		"sglang-b":  {Proxy: "http://127.0.0.1:30000", CheckEndpoint: "/health"},
+		"muse":      {Proxy: "http://127.0.0.1:30001", CheckEndpoint: "/health"},
+		"parakeet":  {Proxy: "http://127.0.0.1:8990", CheckEndpoint: "/health"},
+		"nocheck":   {Proxy: "http://127.0.0.1:9999", CheckEndpoint: "none"},
+		"peermodel": {Proxy: "http://127.0.0.1:8888", CheckEndpoint: "/health"},
+	}
+	// peermodel is not handled locally (it belongs to a peer).
+	handles := func(id string) bool { return id != "peermodel" }
+
+	got := adoptEligibleModels(models, handles)
+	// sglang-a/b share :30000 → excluded; nocheck has checkEndpoint "none" →
+	// excluded; peermodel is not local → excluded. Only the distinct-port
+	// services remain, sorted.
+	if want := "muse,parakeet"; strings.Join(got, ",") != want {
+		t.Fatalf("adoptEligibleModels = %v, want [%s]", got, want)
+	}
+}

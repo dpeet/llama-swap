@@ -251,6 +251,8 @@ func New(cfg config.Config, muxlog *logmon.Monitor, proxylog *logmon.Monitor, up
 	s.tools = tools
 
 	s.routes()
+	// NOTE: adopt is NOT started here — it must run for the initial server only,
+	// not on hot reload (see StartAdopt). llama-swap.go calls it for initialSrv.
 	s.startPreload()
 	return s, nil
 }

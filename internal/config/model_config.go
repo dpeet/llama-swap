@@ -87,6 +87,14 @@ type ModelConfig struct {
 	Unlisted      bool     `yaml:"unlisted"`
 	UseModelName  string   `yaml:"useModelName"`
 
+	// DetachOnShutdown leaves the upstream running when llama-swap itself shuts
+	// down or reloads: only llama-swap's supervisor process is signalled, and
+	// CmdStop is skipped, so a neighbor container (cmd `docker compose up -d;
+	// exec docker wait <ctr>`) survives a llama-swap restart instead of being
+	// torn down. Swaps and TTL unloads still run CmdStop normally to free memory.
+	// Pair with hooks.on_startup.adopt to re-attach on the next start.
+	DetachOnShutdown bool `yaml:"detachOnShutdown"`
+
 	// #179 for /v1/models
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`

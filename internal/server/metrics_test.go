@@ -69,6 +69,32 @@ func TestServer_ParseMetrics_Timings(t *testing.T) {
 	}
 }
 
+func TestServer_ParseMetrics_SGLangUsageOnlyRateFallback(t *testing.T) {
+	// SGLang emits only a usage block (no timings, no metrics object), so the
+	// gen rate falls back to end-to-end output_tokens / wall_duration. Backdate
+	// start by 2s so the wall duration — and thus the expected rate — is
+	// deterministic within a tight band.
+	body := `{"usage":{"prompt_tokens":12,"completion_tokens":100}}`
+	parsed := gjson.Parse(body)
+	start := time.Now().Add(-2 * time.Second)
+	entry, err := parseMetrics("m", start, parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"))
+	if err != nil {
+		t.Fatalf("parseMetrics: %v", err)
+	}
+	if entry.Tokens.InputTokens != 12 || entry.Tokens.OutputTokens != 100 {
+		t.Fatalf("tokens = %+v", entry.Tokens)
+	}
+	// 100 tokens over >=2s wall time ⇒ (45, 50] tok/s (test overhead only ever
+	// lengthens the duration, so the rate can only drop slightly below 50).
+	if tps := entry.Tokens.TokensPerSecond; tps <= 45 || tps > 50 {
+		t.Fatalf("TokensPerSecond = %v, want ~50 in (45,50]", tps)
+	}
+	// Prompt rate stays unknown: a usage-only response has no prefill/decode split.
+	if entry.Tokens.PromptPerSecond != -1.0 {
+		t.Fatalf("PromptPerSecond = %v, want -1 (unknown)", entry.Tokens.PromptPerSecond)
+	}
+}
+
 func TestServer_ProcessStreamingResponse(t *testing.T) {
 	body := []byte("data: {\"choices\":[{}]}\n\n" +
 		"data: {\"usage\":{\"prompt_tokens\":15,\"completion_tokens\":33}}\n\n" +

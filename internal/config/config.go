@@ -114,6 +114,13 @@ type HooksConfig struct {
 type HookOnStartup struct {
 	Preload []string `yaml:"preload"`
 	Profile string   `yaml:"profile"`
+	// Adopt attaches to any local model whose upstream is already answering its
+	// checkEndpoint at startup (e.g. a neighbor container left running across a
+	// llama-swap restart), so the router knows it is live instead of starting a
+	// second model beside it. Only models with a proxy address unique among
+	// local models are adopted; a shared address can't be attributed to one
+	// model from a health probe alone.
+	Adopt bool `yaml:"adopt"`
 }
 
 type Store struct {

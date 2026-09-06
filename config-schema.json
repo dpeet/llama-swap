@@ -495,6 +495,11 @@
                         "default": "",
                         "description": "Override the model name sent to upstream server. Useful if upstream expects a different name."
                     },
+                    "detachOnShutdown": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "When llama-swap itself shuts down or reloads, signal only its supervisor process and skip cmdStop, leaving the upstream running. Lets a neighbor container (cmd 'docker compose up -d; exec docker wait <ctr>') survive a llama-swap restart. Swaps and TTL unloads still run cmdStop. Pair with hooks.on_startup.adopt."
+                    },
                     "filters": {
                         "type": "object",
                         "properties": {
@@ -643,6 +648,11 @@
                             "type": "string",
                             "default": "",
                             "description": "Profile to activate on startup and after a configuration reload. Must name a key under profiles. An empty value starts with no profile active."
+                        },
+                        "adopt": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "On startup, attach to any local model whose upstream is already answering its checkEndpoint (e.g. a neighbor container left running across a llama-swap restart) so the router treats it as live instead of starting a second model beside it. Only models with a proxy address unique among local models are adopted."
                         }
                     },
                     "additionalProperties": false,

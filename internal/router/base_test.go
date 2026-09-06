@@ -445,6 +445,37 @@ func TestBaseRouter_IgnoreWebsocketsDoesNotBlockSwap(t *testing.T) {
 	waitSignal(t, websocketDone, "websocket request finish")
 }
 
+// TestBaseRouter_SwapUsesUnloadTimeoutForEvictions asserts a swap stops the
+// evicted model with its configured unloadTimeout, not the (longer) cold-start
+// healthCheckTimeout the incoming target uses. doSwap previously used
+// healthCheckTimeout for both, silently ignoring the documented per-model
+// unloadTimeout on the swap path.
+func TestBaseRouter_SwapUsesUnloadTimeoutForEvictions(t *testing.T) {
+	a := newFakeProcess("a")
+	a.markReady()
+	pb := newFakeProcess("b")
+	pb.autoReady = true
+	conf := config.Config{
+		HealthCheckTimeout: 5,
+		Models: map[string]config.ModelConfig{
+			"a": {UnloadTimeout: 2},
+			"b": {},
+		},
+	}
+	b := newTestBaseWithConfig(t, conf, map[string]process.Process{"a": a, "b": pb}, &stubPlanner{
+		evict: map[string][]string{"b": {"a"}},
+	})
+
+	w := httptest.NewRecorder()
+	b.ServeHTTP(w, newRequest("b"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%q", w.Code, w.Body.String())
+	}
+	if got := a.lastStopTimeout(); got != 2*time.Second {
+		t.Fatalf("evicted model stop timeout = %v, want 2s (unloadTimeout, not the 5s healthCheckTimeout)", got)
+	}
+}
+
 // TestBaseRouter_RequestDuringStop is the router-level regression test for
 // issue #946. A process being stopped outside the router's knowledge (a TTL
 // unload, a crash, an operator kill) must not wedge the swap machinery: the
@@ -696,5 +727,37 @@ func TestBaseRouter_Shutdown_StopsAllProcesses(t *testing.T) {
 	// Second Shutdown should report already in progress.
 	if err := b.Shutdown(0); err == nil {
 		t.Errorf("second Shutdown returned nil, want error")
+	}
+}
+
+func TestBaseRouter_Shutdown_DetachesConfiguredModels(t *testing.T) {
+	keep := newFakeProcess("keep")
+	keep.markReady()
+	go keep.Run(0)
+	drop := newFakeProcess("drop")
+	drop.markReady()
+	go drop.Run(0)
+
+	conf := config.Config{
+		Models: map[string]config.ModelConfig{
+			"keep": {DetachOnShutdown: true},
+			"drop": {},
+		},
+	}
+	b := newTestBaseWithConfig(t, conf, map[string]process.Process{"keep": keep, "drop": drop}, &stubPlanner{})
+
+	if err := b.Shutdown(time.Second); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	// keep is detach-configured → Detach (CmdStop skipped, container preserved).
+	if got := keep.detachCalls.Load(); got != 1 {
+		t.Errorf("keep.detachCalls=%d want 1 (detach-configured model must be detached)", got)
+	}
+	// drop is not → Stop (normal teardown, CmdStop runs).
+	if got := drop.detachCalls.Load(); got != 0 {
+		t.Errorf("drop.detachCalls=%d want 0 (non-detach model must be stopped, not detached)", got)
+	}
+	if got := drop.stopCalls.Load(); got != 1 {
+		t.Errorf("drop.stopCalls=%d want 1", got)
 	}
 }

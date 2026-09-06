@@ -90,6 +90,9 @@ type startReq struct {
 
 type stopReq struct {
 	timeout time.Duration
+	// detach skips CmdStop and signals only llama-swap's supervisor process,
+	// leaving a detached upstream container running (see Detach).
+	detach  bool
 	respond chan error
 }
 
@@ -131,6 +134,14 @@ type ProcessCommand struct {
 
 	lastUse  atomic.Int64 // unix nano timestamp of last ServeHTTP completion
 	inflight atomic.Int64 // current in-flight ServeHTTP calls
+
+	// pendingDetach carries a stop request's detach intent into a doStart that
+	// is aborted mid-start: the stop handler sets it before cancelling startCtx,
+	// and doStart's abort() reads it so a detach-configured model caught while
+	// health-checking skips CmdStop (keeps its neighbor container) instead of
+	// tearing it down. Reset to false before each start so an intrinsic startup
+	// failure (health timeout, premature exit) still runs the normal CmdStop.
+	pendingDetach atomic.Bool
 }
 
 var _ Process = (*ProcessCommand)(nil)
@@ -234,7 +245,7 @@ func (p *ProcessCommand) run() {
 			setState(StateShutdown)
 			if cmd != nil {
 				p.handler.Store(nil)
-				p.killProcess(cmd, cmdCancel, cmdDone, parentCancelGraceTimeout)
+				p.killProcess(cmd, cmdCancel, cmdDone, parentCancelGraceTimeout, false)
 				cmd = nil
 				cmdDone = nil
 				cmdCancel = nil
@@ -308,6 +319,7 @@ func (p *ProcessCommand) run() {
 			}
 			setState(StateStarting)
 
+			p.pendingDetach.Store(false) // reset; a stop handler sets it if it aborts this start
 			startCtx, cancelStart := context.WithCancel(context.Background())
 			resultCh := make(chan startResult, 1)
 			go func() {
@@ -376,10 +388,13 @@ func (p *ProcessCommand) run() {
 			// must kill ourselves. The Run caller gets ErrAbort; the Stop
 			// caller is parked in pendingStop and answered below.
 			case stop := <-p.stopCh:
+				// Record detach intent before cancelling: doStart may tear the
+				// half-started process down itself via abort(), which reads this.
+				p.pendingDetach.Store(stop.detach)
 				cancelStart()
 				res := <-resultCh
 				if res.cmd != nil {
-					p.killProcess(res.cmd, res.cancel, res.cmdDone, stop.timeout)
+					p.killProcess(res.cmd, res.cancel, res.cmdDone, stop.timeout, stop.detach)
 				}
 				setState(StateStopped)
 				notifyWaiters(ErrStartAborted)
@@ -399,7 +414,7 @@ func (p *ProcessCommand) run() {
 				setState(StateShutdown)
 				res := <-resultCh
 				if res.cmd != nil {
-					p.killProcess(res.cmd, res.cancel, res.cmdDone, parentCancelGraceTimeout)
+					p.killProcess(res.cmd, res.cancel, res.cmdDone, parentCancelGraceTimeout, false)
 				}
 				notifyWaiters(fmt.Errorf("[%s] shutdown", p.id))
 				respondRun(fmt.Errorf("[%s] shutdown", p.id))
@@ -417,7 +432,7 @@ func (p *ProcessCommand) run() {
 			toreDown := cmd != nil
 			if cmd != nil {
 				setState(StateStopping)
-				p.killProcess(cmd, cmdCancel, cmdDone, stop.timeout)
+				p.killProcess(cmd, cmdCancel, cmdDone, stop.timeout, stop.detach)
 				cmd = nil
 				cmdDone = nil
 				cmdCancel = nil
@@ -539,7 +554,10 @@ func (p *ProcessCommand) doStart(startCtx context.Context, healthCheckTimeout ti
 	}()
 
 	abort := func(err error) startResult {
-		p.killProcess(cmd, cmdCancel, cmdDone, 5*time.Second)
+		// Honor a detach requested by the stop that aborted this start (set in
+		// the stopCh handler before cancelStart); an intrinsic failure leaves
+		// pendingDetach false, so CmdStop still runs to free a half-started model.
+		p.killProcess(cmd, cmdCancel, cmdDone, 5*time.Second, p.pendingDetach.Load())
 		return startResult{err: err}
 	}
 	prematureExit := func() startResult {
@@ -666,7 +684,7 @@ func (p *ProcessCommand) sendStopSignal(cmd *exec.Cmd) error {
 // cancel() is still invoked (deferred) to release the context, but only after
 // the process has exited and os/exec's ctx watcher has already torn down, so it
 // never re-fires cmd.Cancel.
-func (p *ProcessCommand) killProcess(cmd *exec.Cmd, cancel context.CancelFunc, cmdDone <-chan struct{}, gracefulTimeout time.Duration) {
+func (p *ProcessCommand) killProcess(cmd *exec.Cmd, cancel context.CancelFunc, cmdDone <-chan struct{}, gracefulTimeout time.Duration, detach bool) {
 	if cancel == nil {
 		return
 	}
@@ -677,6 +695,17 @@ func (p *ProcessCommand) killProcess(cmd *exec.Cmd, cancel context.CancelFunc, c
 	// path below still guarantees teardown.
 	if cmd != nil {
 		go func() {
+			if detach {
+				// Detach: SIGTERM only llama-swap's supervisor process group
+				// (e.g. the `docker wait` of a neighbor-container cmd), skipping
+				// CmdStop, so the detached upstream container keeps running past
+				// this llama-swap shutdown/reload. Adopt re-attaches it on start.
+				p.proxyLogger.Debugf("[%s] detaching supervisor with timeout %v", p.id, gracefulTimeout)
+				if err := terminateProcessTree(cmd); err != nil {
+					p.proxyLogger.Warnf("[%s] detach signal failed: %v", p.id, err)
+				}
+				return
+			}
 			p.proxyLogger.Debugf("[%s] sending stop signal with timeout %v", p.id, gracefulTimeout)
 			if err := p.sendStopSignal(cmd); err != nil {
 				p.proxyLogger.Warnf("[%s] stop signal failed: %v", p.id, err)
@@ -772,8 +801,20 @@ func (p *ProcessCommand) WaitReady(ctx context.Context) error {
 }
 
 func (p *ProcessCommand) Stop(timeout time.Duration) error {
+	return p.stop(timeout, false)
+}
+
+// Detach tears down llama-swap's supervision of the process without running
+// CmdStop, leaving a detached upstream container running (see the Process
+// interface). Same teardown path as Stop otherwise.
+func (p *ProcessCommand) Detach(timeout time.Duration) error {
+	return p.stop(timeout, true)
+}
+
+func (p *ProcessCommand) stop(timeout time.Duration, detach bool) error {
 	req := stopReq{
 		timeout: timeout,
+		detach:  detach,
 		respond: make(chan error, 1),
 	}
 	select {

@@ -420,6 +420,97 @@ func (s *Server) startPreload() {
 	}()
 }
 
+// adoptEligibleModels returns the local model IDs eligible for startup adoption:
+// those with a checkEndpoint set and a proxy address unique among local models.
+// A shared proxy (e.g. several sglang models on one :30000) can't be attributed
+// to a single model from a health probe alone, so those are excluded.
+func adoptEligibleModels(models map[string]config.ModelConfig, handles func(string) bool) []string {
+	proxyCount := map[string]int{}
+	for id, mc := range models {
+		if handles(id) {
+			proxyCount[mc.Proxy]++
+		}
+	}
+	var eligible []string
+	for id, mc := range models {
+		if !handles(id) {
+			continue
+		}
+		endpoint := strings.TrimSpace(mc.CheckEndpoint)
+		if endpoint == "" || endpoint == "none" {
+			continue
+		}
+		if proxyCount[mc.Proxy] != 1 {
+			continue
+		}
+		eligible = append(eligible, id)
+	}
+	sort.Strings(eligible)
+	return eligible
+}
+
+// StartAdopt attaches to local models whose upstream is already answering at
+// startup — e.g. a neighbor container left alive across a llama-swap restart.
+// Without it RunningModels() reports nothing after a restart (every process
+// starts StateStopped), so the next request could start a second model beside
+// the live one and OOM on a unified-memory box. Only unique-proxy models are
+// adopted (see adoptEligibleModels).
+//
+// Called explicitly for the INITIAL server only (from llama-swap.go), never
+// from New — a hot reload builds a new server before shutting the old one down,
+// so adopting there would attach to containers the old server is about to
+// cmdStop, then cold-boot them. The probe+attach runs in a background goroutine.
+func (s *Server) StartAdopt() {
+	if !s.cfg.Hooks.OnStartup.Adopt {
+		return
+	}
+	eligible := adoptEligibleModels(s.cfg.Models, s.local.Handles)
+	if len(eligible) == 0 {
+		return
+	}
+	go func() {
+		client := &http.Client{Timeout: 2 * time.Second}
+		for _, modelID := range eligible {
+			mc := s.cfg.Models[modelID]
+			if !s.probeUpstreamHealthy(client, mc.Proxy, mc.CheckEndpoint) {
+				continue
+			}
+			s.proxylog.Infof("adopt: %s upstream already running, attaching", modelID)
+			req, err := http.NewRequestWithContext(s.shutdownCtx, http.MethodGet, "/", nil)
+			if err != nil {
+				continue
+			}
+			req = req.WithContext(swaputil.SetContext(req.Context(), swaputil.ReqContextData{Model: modelID, ModelID: modelID, Metadata: make(map[string]string)}))
+			// A running container makes the model's `docker compose up -d` cmd a
+			// no-op and `docker wait` attaches; the health check passes and the
+			// process becomes StateReady, so eviction planning sees it as live.
+			// The attach is a side effect of routing through EnsureReady — the
+			// probe response status is NOT a success signal (an adopted ASR/TTS
+			// model legitimately 404s GET /), so we don't gate on it. A genuine
+			// attach failure surfaces via the process's own health-check logging.
+			dw := &discardResponseWriter{status: http.StatusOK}
+			s.local.ServeHTTP(dw, req)
+		}
+	}()
+}
+
+// probeUpstreamHealthy does a short GET to proxy+endpoint and reports a 200. It
+// talks to the upstream directly (not through the router) so it observes an
+// already-running container without triggering a model start.
+func (s *Server) probeUpstreamHealthy(client *http.Client, proxy, endpoint string) bool {
+	url := strings.TrimRight(proxy, "/") + "/" + strings.TrimLeft(strings.TrimSpace(endpoint), "/")
+	req, err := http.NewRequestWithContext(s.shutdownCtx, http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
 // handleMetrics serves Prometheus-format performance metrics. Returns 503 when
 // performance monitoring is disabled.
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
