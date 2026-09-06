@@ -1,0 +1,55 @@
+# Multi-stage build of the GB10 llama-swap fork (github.com/dpeet/llama-swap).
+# Builds the binary FROM SOURCE (build context = the fork checkout) so the
+# bundled GB10 patches are compiled in, replacing the previous "download the
+# release binary" approach. Runtime is the box's debian image with the docker
+# CLI + compose plugin, because llama-swap runs each model's cmd/cmdStop as
+# `docker compose` against the host daemon (socket mounted by
+# serve/compose.llama-swap.yaml). arm64-only: this runs on the DGX Spark (GB10).
+# See sglang-edge-probe/docs/todo/llama-swap-gb10-fork-patches.md.
+
+# --- stage 1: build the Svelte UI (embedded into the Go binary via embed_ui) ---
+FROM node:22 AS ui-builder
+WORKDIR /src
+# .npmrc carries legacy-peer-deps=true, required to resolve a vite peer-dep
+# conflict; without it npm ci fails ERESOLVE.
+COPY ui/package.json ui/package-lock.json ui/.npmrc ./ui/
+RUN cd ui && npm ci --no-audit --no-fund
+COPY ui/ ./ui/
+# vite's outDir is ../internal/server/ui_dist (ui/vite.config.ts); create the
+# parent so the build writes the embed target the go stage picks up.
+RUN mkdir -p internal/server && cd ui && npm run build
+
+# --- stage 2: compile llama-swap with the UI embedded ---
+FROM golang:1.27 AS go-builder
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+# Overlay the freshly built UI (the .dockerignore drops any local ui_dist).
+COPY --from=ui-builder /src/internal/server/ui_dist ./internal/server/ui_dist
+ARG VERSION=gb10-fork
+ARG COMMIT=local
+ARG DATE=
+# -buildvcs=false: the .git dir is excluded from context, and version/commit are
+# injected via ldflags below, so VCS stamping is neither possible nor needed.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags embed_ui -buildvcs=false \
+      -ldflags="-X main.commit=${COMMIT} -X main.version=${VERSION} -X main.date=${DATE}" \
+      -o /out/llama-swap .
+
+# --- stage 3: runtime (debian + docker CLI + compose plugin) ---
+# Debian (not alpine): the /ui Performance page's GPU section runs nvidia-smi,
+# injected by the NVIDIA container toolkit as a glibc binary that cannot run on
+# musl. On GB10, nvidia-smi reports utilization/temp/power but memory as N/A
+# (unified memory) — patch #2 fills the memory figure from system RAM +
+# per-process nvidia-smi. bookworm (not trixie) because Docker's apt repo
+# reliably publishes bookworm.
+FROM debian:12-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && echo "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=go-builder /out/llama-swap /usr/local/bin/llama-swap
+ENTRYPOINT ["/usr/local/bin/llama-swap"]
