@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -249,16 +250,37 @@ func (b *baseRouter) doSwap(modelID string, toStop []string) {
 	// ttl-and-unloading.md: unloadTimeout "applies to every unload — TTL
 	// expiry, a manual unload, or a swap").
 	var wg sync.WaitGroup
-	for _, mID := range toStop {
+	stopErrs := make([]error, len(toStop))
+	for i, mID := range toStop {
 		wg.Add(1)
-		go func(p process.Process, id string) {
+		go func(idx int, p process.Process, id string) {
 			defer wg.Done()
 			if err := p.Stop(b.unloadTimeout(id)); err != nil {
 				b.logger.Warnf("%s: stopping %s failed: %v", b.name, id, err)
+				stopErrs[idx] = fmt.Errorf("%s: %w", id, err)
 			}
-		}(b.processes[mID], mID)
+		}(i, b.processes[mID], mID)
 	}
 	wg.Wait()
+
+	// With the memory-admission ledger on, the fit check that authorised this
+	// swap CREDITED the evictees' ceilings as freed (residentAfter =
+	// (running ∖ evict) ∪ {target}). A stop that did not actually complete makes
+	// that credit fiction: starting the target now would put both footprints on
+	// the pool at once — the double-count the ledger exists to prevent, on a box
+	// whose kernel OOM-killer cannot see model memory. So fail the swap instead.
+	// With the gate off (memoryPool == 0) behaviour is unchanged: log and load.
+	if b.memoryGateEnabled() {
+		if stopErr := errors.Join(stopErrs...); stopErr != nil {
+			err := fmt.Errorf("%s: aborting swap to %s, eviction did not complete: %w", b.name, modelID, stopErr)
+			b.logger.Errorf("%v", err)
+			select {
+			case b.swapDoneCh <- scheduler.SwapDone{ModelID: modelID, Err: err}:
+			case <-b.shutdownCtx.Done():
+			}
+			return
+		}
+	}
 
 	// EnsureReady rather than a State() check followed by Run: the router must
 	// not assume anything about the process. Deciding out here means acting on
@@ -361,6 +383,13 @@ func (b *baseRouter) unloadTimeout(modelID string) time.Duration {
 		return time.Duration(mc.UnloadTimeout) * time.Second
 	}
 	return time.Duration(b.config.UnloadTimeout) * time.Second
+}
+
+// memoryGateEnabled reports whether the memory-admission ledger is active. It is
+// the same switch the scheduler uses (FIFO.fits early-returns when pool == 0), so
+// an unconfigured box keeps exactly today's swap behaviour.
+func (b *baseRouter) memoryGateEnabled() bool {
+	return b.config.MemoryPool > 0
 }
 
 // detachOnShutdown reports whether the model should be detached (upstream left
