@@ -476,6 +476,118 @@ func TestBaseRouter_SwapUsesUnloadTimeoutForEvictions(t *testing.T) {
 	}
 }
 
+// memGateConfig builds a two-model config with the memory-admission ledger on:
+// pool 100, a and b at 60 each, so neither fits beside the other but either fits
+// once the planner's eviction is credited. pool == 0 turns the ledger off with
+// the same model set, which is the control for the hot path.
+func memGateConfig(pool int64) config.Config {
+	return config.Config{
+		HealthCheckTimeout: 5,
+		MemoryPool:         pool,
+		Models: map[string]config.ModelConfig{
+			"a": {MemoryCeiling: 60, UnloadTimeout: 1},
+			"b": {MemoryCeiling: 60},
+		},
+	}
+}
+
+// TestBaseRouter_SwapAbortsWhenEvictionFailsUnderMemoryGate is the regression
+// test for todo 1.6 (H2). With the ledger on, the fit check admitted b only
+// because it credited a's ceiling as freed by the eviction. If a's Stop does not
+// actually complete (a forced kill that leaves the upstream container alive),
+// loading b anyway puts 120 on a 100 pool — both ceilings counted as available
+// when only one was freed. The swap must fail instead of starting the target.
+func TestBaseRouter_SwapAbortsWhenEvictionFailsUnderMemoryGate(t *testing.T) {
+	a := newFakeProcess("a")
+	a.markReady()
+	a.stopErr = process.ErrForcedKill // stop reports failure and a stays resident
+	pb := newFakeProcess("b")
+	pb.autoReady = true
+
+	b := newTestBaseWithConfig(t, memGateConfig(100), map[string]process.Process{"a": a, "b": pb}, &stubPlanner{
+		evict: map[string][]string{"b": {"a"}},
+	})
+
+	w := httptest.NewRecorder()
+	b.ServeHTTP(w, newRequest("b"))
+
+	if w.Code == http.StatusOK {
+		t.Fatalf("swap succeeded despite a failed eviction: status=%d body=%q", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "eviction did not complete") {
+		t.Errorf("error body does not name the failed eviction: %q", w.Body.String())
+	}
+	if got := a.stopCalls.Load(); got != 1 {
+		t.Errorf("a.stopCalls=%d want 1 (the eviction must still have been attempted)", got)
+	}
+	// The target must never have been asked to start: EnsureReady is the only
+	// path that loads it, and asking is already too late.
+	select {
+	case <-pb.ensureAsked:
+		t.Fatal("EnsureReady called on the target after the eviction failed")
+	default:
+	}
+	if got := pb.runCalls.Load(); got != 0 {
+		t.Errorf("b.runCalls=%d want 0", got)
+	}
+	if got := pb.serveCalls.Load(); got != 0 {
+		t.Errorf("b.serveCalls=%d want 0", got)
+	}
+}
+
+// TestBaseRouter_SwapProceedsWhenEvictionFailsWithoutMemoryGate pins the hot
+// path: with the ledger off (memoryPool == 0, every box that has not configured
+// it) a failed evictee stop is still only logged and the swap loads the target,
+// exactly as before todo 1.6.
+func TestBaseRouter_SwapProceedsWhenEvictionFailsWithoutMemoryGate(t *testing.T) {
+	a := newFakeProcess("a")
+	a.markReady()
+	a.stopErr = process.ErrForcedKill
+	pb := newFakeProcess("b")
+	pb.autoReady = true
+
+	b := newTestBaseWithConfig(t, memGateConfig(0), map[string]process.Process{"a": a, "b": pb}, &stubPlanner{
+		evict: map[string][]string{"b": {"a"}},
+	})
+
+	w := httptest.NewRecorder()
+	b.ServeHTTP(w, newRequest("b"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d want 200 body=%q", w.Code, w.Body.String())
+	}
+	if got := pb.serveCalls.Load(); got != 1 {
+		t.Errorf("b.serveCalls=%d want 1", got)
+	}
+}
+
+// TestBaseRouter_SwapProceedsWhenEvictionSucceedsUnderMemoryGate is the
+// happy-path half of todo 1.6: with the ledger on and the evictee stopping
+// cleanly, the swap is unchanged.
+func TestBaseRouter_SwapProceedsWhenEvictionSucceedsUnderMemoryGate(t *testing.T) {
+	a := newFakeProcess("a")
+	a.markReady()
+	pb := newFakeProcess("b")
+	pb.autoReady = true
+
+	b := newTestBaseWithConfig(t, memGateConfig(100), map[string]process.Process{"a": a, "b": pb}, &stubPlanner{
+		evict: map[string][]string{"b": {"a"}},
+	})
+
+	w := httptest.NewRecorder()
+	b.ServeHTTP(w, newRequest("b"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d want 200 body=%q", w.Code, w.Body.String())
+	}
+	if got := a.State(); got != process.StateStopped {
+		t.Errorf("a state=%q want stopped", got)
+	}
+	if got := pb.serveCalls.Load(); got != 1 {
+		t.Errorf("b.serveCalls=%d want 1", got)
+	}
+}
+
 // TestBaseRouter_RequestDuringStop is the router-level regression test for
 // issue #946. A process being stopped outside the router's knowledge (a TTL
 // unload, a crash, an operator kill) must not wedge the swap machinery: the
@@ -657,6 +769,76 @@ func TestBaseRouter_ConcurrencyLimitRejectsBeforeLoadingStream(t *testing.T) {
 	close(bProc.serveBlock)
 	for name, ch := range map[string]chan struct{}{"b": bDone, "a1": aDone1, "a2": aDone2} {
 		waitSignal(t, ch, name+" request finish")
+	}
+}
+
+// TestBaseRouter_MemoryRefusalRejectsBeforeLoadingStream is the regression test
+// for todo 1.7 (C1). A never-fits memory refusal is a decision the scheduler can
+// make immediately, so it must be delivered on the admission channel — like the
+// concurrency-limit rejection above — rather than after admission succeeded.
+// Delivered late, a streaming client has already been handed 200 + SSE headers
+// by the loading writer and the 503 can only be framed into the stream as an
+// error frame, which is the failure-reported-as-success shape of #1029. The
+// non-streaming path was always a clean 503; this brings streaming in line.
+func TestBaseRouter_MemoryRefusalRejectsBeforeLoadingStream(t *testing.T) {
+	sendLoading := true
+	conf := config.Config{
+		HealthCheckTimeout: 5,
+		MemoryPool:         100,
+		Models: map[string]config.ModelConfig{
+			// ceiling 200 > pool 100: never fits, no eviction can help.
+			"big": {MemoryCeiling: 200, SendLoadingState: &sendLoading},
+		},
+	}
+	big := newFakeProcess("big")
+	big.autoReady = true
+	b := newTestBaseWithConfig(t, conf, map[string]process.Process{"big": big}, &stubPlanner{})
+
+	w := httptest.NewRecorder()
+	b.ServeHTTP(w, newStreamRequest("big"))
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d want 503 body=%q", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type=%q want application/json", got)
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "llama-swap loading model") || strings.Contains(body, "data: ") {
+		t.Fatalf("503 body contains a partial SSE stream: %q", body)
+	}
+	var envelope swaputil.ErrorEnvelope
+	if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("503 body is not an OpenAI error envelope: %v, body=%q", err, body)
+	}
+	if envelope.Error.Code != "memory_admission" || envelope.Error.Type != swaputil.ErrorTypeServer {
+		t.Fatalf("503 error=%+v, want a server_error with code memory_admission", envelope.Error)
+	}
+	if got := big.runCalls.Load(); got != 0 {
+		t.Errorf("big.runCalls=%d want 0 (a refused model must never be started)", got)
+	}
+}
+
+// TestBaseRouter_MemoryRefusalIsCleanForNonStreaming pins the behaviour the
+// streaming path above is being brought in line with.
+func TestBaseRouter_MemoryRefusalIsCleanForNonStreaming(t *testing.T) {
+	conf := config.Config{
+		HealthCheckTimeout: 5,
+		MemoryPool:         100,
+		Models:             map[string]config.ModelConfig{"big": {MemoryCeiling: 200}},
+	}
+	big := newFakeProcess("big")
+	big.autoReady = true
+	b := newTestBaseWithConfig(t, conf, map[string]process.Process{"big": big}, &stubPlanner{})
+
+	w := httptest.NewRecorder()
+	b.ServeHTTP(w, newRequest("big"))
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d want 503 body=%q", w.Code, w.Body.String())
+	}
+	if got := big.runCalls.Load(); got != 0 {
+		t.Errorf("big.runCalls=%d want 0", got)
 	}
 }
 

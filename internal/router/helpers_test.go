@@ -70,6 +70,12 @@ type fakeProcess struct {
 	// Stop calls can be in flight simultaneously.
 	stopBlock chan struct{}
 
+	// stopErr, when non-nil, makes Stop fail with it AND leave the process in
+	// StateStopping — the shape of a real forced kill (process.ErrForcedKill):
+	// llama-swap's supervisor is gone but the upstream was never seen exiting,
+	// so its memory may still be held.
+	stopErr error
+
 	runCalls     atomic.Int32
 	stopCalls    atomic.Int32
 	detachCalls  atomic.Int32
@@ -189,6 +195,13 @@ func (f *fakeProcess) Stop(timeout time.Duration) error {
 	// process reports StateStopping, as a real one does.
 	if f.stopBlock != nil {
 		<-f.stopBlock
+	}
+
+	// Test hook: a stop that did not complete. The state is deliberately left at
+	// StateStopping (never Stopped) so the process keeps reporting as resident,
+	// like a container that outlived the kill of its attached client.
+	if f.stopErr != nil {
+		return f.stopErr
 	}
 
 	f.mu.Lock()

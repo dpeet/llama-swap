@@ -51,8 +51,12 @@ type Process interface {
 	//	shutdown -> returns an error
 	EnsureReady(ctx context.Context, timeout time.Duration) error
 
-	// Stop blocks until the process has terminated. It returns nil when
-	// the process terminated as expected (exit 0)
+	// Stop blocks until the process has terminated. It returns nil when the
+	// process exited on its own within the graceful timeout, and ErrForcedKill
+	// when that window expired and the process group had to be SIGKILLed — in
+	// which case the upstream (e.g. a container the cmd merely attached to) may
+	// still be alive and holding its resources. Stopping an already-stopped
+	// process is an idempotent no-op and returns nil.
 	Stop(timeout time.Duration) error
 
 	// Detach is like Stop but skips CmdStop: it signals only llama-swap's own
