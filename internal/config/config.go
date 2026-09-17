@@ -200,6 +200,15 @@ type Config struct {
 	GlobalTTL          int               `yaml:"globalTTL"`
 	UnloadTimeout      int               `yaml:"unloadTimeout"`
 
+	// MemoryPool is the usable unified-memory budget in bytes for the FIFO
+	// scheduler's memory-admission gate (box-wide). NOT auto-detected —
+	// MemAvailable under-reports free on GB10 unified memory. 0 disables memory
+	// admission entirely (no behavior change vs. a build without it).
+	MemoryPool int64 `yaml:"memoryPool"`
+	// MemoryReserve is headroom in bytes kept free below MemoryPool: a load is
+	// admitted only when Σ resident ceilings + new ceiling ≤ MemoryPool − MemoryReserve.
+	MemoryReserve int64 `yaml:"memoryReserve"`
+
 	Models    map[string]ModelConfig    `yaml:"models"` /* key is model ID */
 	Profiles  map[string]ProfileConfig  `yaml:"profiles"`
 	Selectors map[string]SelectorConfig `yaml:"selectors"`
