@@ -102,7 +102,7 @@ func New(conf config.Config, name string, logger *logmon.Monitor, planner Swappe
 	}
 	switch use {
 	case "fifo":
-		return NewFIFO(name, logger, planner, conf.Routing.Scheduler.Settings.Fifo, conf.Models, eff), nil
+		return NewFIFO(name, logger, planner, conf.Routing.Scheduler.Settings.Fifo, conf.Models, conf.MemoryPool, conf.MemoryReserve, eff), nil
 	default:
 		return nil, fmt.Errorf("unsupported scheduler type: %q", use)
 	}

@@ -40,23 +40,44 @@ type FIFO struct {
 	effects Effects
 
 	limits   map[string]int
+	ceilings map[string]int64 // model ID -> hard resident footprint in bytes (0 = unset)
+	pool     int64            // usable unified-memory budget in bytes (0 disables the gate)
+	reserve  int64            // headroom kept free below pool
 	active   map[string]*activeSwap
 	reserved map[string]int
 	inFlight map[string]int
 	queued   []HandlerReq
 }
 
-// NewFIFO builds a FIFO scheduler. Per-model concurrency limits are derived
-// from models: each model's ConcurrencyLimit overrides defaultConcurrencyLimit
-// when set to a value greater than zero.
-func NewFIFO(name string, logger *logmon.Monitor, planner Swapper, cfg config.FifoConfig, models map[string]config.ModelConfig, eff Effects) *FIFO {
+// NewFIFO builds a FIFO scheduler. Per-model concurrency limits and memory
+// ceilings are derived from models. pool/reserve are the box-wide memory budget:
+// pool == 0 disables the memory-admission gate entirely.
+func NewFIFO(name string, logger *logmon.Monitor, planner Swapper, cfg config.FifoConfig, models map[string]config.ModelConfig, pool, reserve int64, eff Effects) *FIFO {
 	limits := make(map[string]int, len(models))
+	ceilings := make(map[string]int64, len(models))
 	for id, mc := range models {
 		limit := defaultConcurrencyLimit
 		if mc.ConcurrencyLimit > 0 {
 			limit = mc.ConcurrencyLimit
 		}
 		limits[id] = limit
+		ceilings[id] = mc.MemoryCeiling
+	}
+
+	// Surface unsized models once at startup when the gate is active: a new load
+	// of one is refused (can't be sized) and, if it becomes resident via
+	// adopt/reload, it's under-counted. Better a loud line than a silent gap.
+	if pool > 0 {
+		var unsized []string
+		for id, c := range ceilings {
+			if c <= 0 {
+				unsized = append(unsized, id)
+			}
+		}
+		if len(unsized) > 0 {
+			sort.Strings(unsized)
+			logger.Warnf("memory admission: %d model(s) have no memoryCeiling and will be refused as new loads / under-counted if resident: %v", len(unsized), unsized)
+		}
 	}
 
 	return &FIFO{
@@ -66,6 +87,9 @@ func NewFIFO(name string, logger *logmon.Monitor, planner Swapper, cfg config.Fi
 		cfg:      cfg,
 		effects:  eff,
 		limits:   limits,
+		ceilings: ceilings,
+		pool:     pool,
+		reserve:  reserve,
 		active:   make(map[string]*activeSwap),
 		reserved: make(map[string]int),
 		inFlight: make(map[string]int),
@@ -118,6 +142,22 @@ func (s *FIFO) OnRequest(req HandlerReq) {
 	if state == process.StateReady && len(evict) == 0 && !collidesWith(req.Model, evict, s.active) {
 		s.logger.Debugf("%s: fast-path serving model %s (already ready)", s.name, req.Model)
 		s.grantHandler(req, req.Model)
+		return
+	}
+
+	// Memory admission: a NEW load must fit the pool once the evict set frees.
+	// Skipped above — an already-ready model (fast path) is already resident.
+	// This runs AFTER admit() (which already reserved a slot), so a rejection
+	// MUST use grantError (releases the reservation + notifies via Respond),
+	// never rejectAdmission (which would double-send to Admit and leak the slot).
+	if !isAdopt(req) && !s.fits(req.Model, evict, running) {
+		if s.neverFits(req.Model) {
+			s.logger.Debugf("%s: refusing model %s (never fits memory budget)", s.name, req.Model)
+			s.grantError(req, swaputil.MemoryAdmissionError{Message: s.memoryRejectMessage(req.Model)})
+		} else {
+			s.logger.Debugf("%s: queuing model %s (does not fit now; waiting for memory to free)", s.name, req.Model)
+			s.enqueue(req)
+		}
 		return
 	}
 
@@ -365,6 +405,80 @@ func (s *FIFO) limit(modelID string) int {
 	return defaultConcurrencyLimit
 }
 
+// fits reports whether target can be admitted under the memory budget once the
+// planned evict set is stopped. pool == 0 disables the gate (feature off). A
+// target with no configured ceiling can't be sized, so it never fits (the caller
+// treats that as a hard refuse via neverFits). running is the pre-swap resident +
+// in-flight set and excludes target. A RESIDENT model with no ceiling is a config
+// error: counted as 0 (best-effort) rather than deadlocking the queue — the
+// shipped earlyoom + fail-closed compose gate backstop an actual OOM.
+func (s *FIFO) fits(target string, evict, running []string) bool {
+	if s.pool == 0 {
+		return true
+	}
+	if s.ceilings[target] <= 0 {
+		return false
+	}
+	budget := s.pool - s.reserve
+	evicted := make(map[string]struct{}, len(evict))
+	for _, id := range evict {
+		evicted[id] = struct{}{}
+	}
+	needed := s.ceilings[target]
+	if needed > budget {
+		return false
+	}
+	for _, id := range running {
+		if id == target {
+			continue
+		}
+		if _, gone := evicted[id]; gone {
+			continue
+		}
+		// A resident model with no configured ceiling is a config error (flagged
+		// once at startup in NewFIFO). Count it as 0 (best-effort) rather than
+		// deadlocking the queue; earlyoom + the fail-closed compose gate backstop
+		// an actual OOM.
+		needed += s.ceilings[id]
+		if needed < 0 || needed > budget { // needed<0 catches int64 overflow
+			return false
+		}
+	}
+	return true
+}
+
+// isAdopt reports whether req is an adoption attach (StartAdopt sets the "adopt"
+// metadata key). Adopt attaches to an already-running container and spends no
+// new memory, so it must skip the memory-admission gate — gating it would refuse
+// a live model and leave it invisible to the ledger.
+func isAdopt(req HandlerReq) bool {
+	if req.Ctx == nil {
+		return false
+	}
+	data, ok := swaputil.ReadContext(req.Ctx)
+	return ok && data.Metadata["adopt"] == "1"
+}
+
+// neverFits reports whether target can never be admitted regardless of eviction:
+// its ceiling alone exceeds the budget, or its ceiling is unknown (unsizable).
+// When the gate is off (pool == 0) nothing is refused this way.
+func (s *FIFO) neverFits(target string) bool {
+	if s.pool == 0 {
+		return false
+	}
+	c := s.ceilings[target]
+	return c <= 0 || c > s.pool-s.reserve
+}
+
+// memoryRejectMessage builds the client-facing 503 message for a memory refusal.
+func (s *FIFO) memoryRejectMessage(target string) string {
+	c := s.ceilings[target]
+	if c <= 0 {
+		return fmt.Sprintf("model %q has no memoryCeiling configured; cannot admit", target)
+	}
+	return fmt.Sprintf("model %q needs %d bytes but only %d are available (pool %d - reserve %d)", target, c, s.pool-s.reserve, s.pool, s.reserve)
+}
+
 // startSwap records the swap as active and launches it via Effects. running is
 // the set EvictionFor saw, forwarded to OnSwapStart so the planner logs against
 // the same picture it decided on.
@@ -423,6 +537,18 @@ func (s *FIFO) drainQueue() {
 		if state == process.StateReady && len(evict) == 0 && !collidesWith(req.Model, evict, s.active) {
 			s.logger.Debugf("%s: queued request for model %s now served fast-path", s.name, req.Model)
 			s.grantHandler(req, req.Model)
+			continue
+		}
+		// Memory admission for a queued load: a never-fits request is dropped
+		// with an error (grantError releases its reservation); a transient
+		// over-budget stays queued to retry on the next residency release.
+		if !isAdopt(req) && !s.fits(req.Model, evict, running) {
+			if s.neverFits(req.Model) {
+				s.logger.Debugf("%s: dropping queued model %s (never fits memory budget)", s.name, req.Model)
+				s.grantError(req, swaputil.MemoryAdmissionError{Message: s.memoryRejectMessage(req.Model)})
+			} else {
+				remaining = append(remaining, req)
+			}
 			continue
 		}
 		if collidesWith(req.Model, evict, s.active) {
