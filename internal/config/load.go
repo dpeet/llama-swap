@@ -87,6 +87,16 @@ func LoadConfigFromReader(r io.Reader) (Config, error) {
 		config.UnloadTimeout = DEFAULT_UNLOAD_TIMEOUT
 	}
 
+	if config.MemoryPool < 0 {
+		return Config{}, fmt.Errorf("memoryPool must be >= 0")
+	}
+	if config.MemoryReserve < 0 {
+		return Config{}, fmt.Errorf("memoryReserve must be >= 0")
+	}
+	if config.MemoryPool > 0 && config.MemoryReserve >= config.MemoryPool {
+		return Config{}, fmt.Errorf("memoryReserve (%d) must be < memoryPool (%d)", config.MemoryReserve, config.MemoryPool)
+	}
+
 	config.UI.Activity.SessionID = normalizeHeaderNames(config.UI.Activity.SessionID)
 
 	if config.Store != nil {
@@ -150,6 +160,10 @@ func LoadConfigFromReader(r io.Reader) (Config, error) {
 		}
 		if modelConfig.UnloadTimeout == 0 {
 			modelConfig.UnloadTimeout = config.UnloadTimeout
+		}
+
+		if modelConfig.MemoryCeiling < 0 {
+			return Config{}, fmt.Errorf("model %s: memoryCeiling must be >= 0", modelId)
 		}
 
 		if err := modelConfig.Capabilities.Validate(); err != nil {

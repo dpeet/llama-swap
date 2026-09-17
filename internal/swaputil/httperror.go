@@ -150,3 +150,33 @@ func (e ConcurrencyLimitError) message() string {
 	}
 	return "Too many requests"
 }
+
+// MemoryAdmissionError is an HTTPError for a 503 memory-admission rejection: the
+// requested model's memory ceiling does not fit the configured pool even after
+// the planned eviction, or its ceiling is unknown so it cannot be sized.
+type MemoryAdmissionError struct {
+	// Message overrides the JSON body's error message. Defaults to
+	// "Model does not fit available memory".
+	Message string
+}
+
+func (e MemoryAdmissionError) Error() string { return "memory admission refused" }
+
+func (e MemoryAdmissionError) StatusCode() int { return http.StatusServiceUnavailable }
+
+func (e MemoryAdmissionError) Header() http.Header {
+	h := http.Header{}
+	h.Set("Content-Type", "application/json")
+	return h
+}
+
+func (e MemoryAdmissionError) Body() []byte {
+	return NewErrorEnvelope(e.StatusCode(), e.message(), "memory_admission").JSON()
+}
+
+func (e MemoryAdmissionError) message() string {
+	if e.Message != "" {
+		return e.Message
+	}
+	return "Model does not fit available memory"
+}

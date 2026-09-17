@@ -102,6 +102,14 @@ type ModelConfig struct {
 	// Limit concurrency of HTTP requests to process
 	ConcurrencyLimit int `yaml:"concurrencyLimit"`
 
+	// MemoryCeiling is the model's hard resident memory footprint in bytes
+	// (weights + peak KV/context + actively-touched PLE working set +
+	// fragmentation + startup transient). The FIFO scheduler's memory-admission
+	// gate sums ceilings of resident models to decide whether a load fits the
+	// unified pool. 0 = unset; a NEW load whose ceiling is unknown is refused
+	// (it can't be sized). Only consulted when Config.MemoryPool > 0.
+	MemoryCeiling int64 `yaml:"memoryCeiling"`
+
 	// Model filters see issue #174
 	Filters ModelFilters `yaml:"filters"`
 
@@ -143,6 +151,7 @@ func (m *ModelConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		Unlisted:         false,
 		UseModelName:     "",
 		ConcurrencyLimit: 0,
+		MemoryCeiling:    0,
 		Name:             "",
 		Description:      "",
 

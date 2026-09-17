@@ -480,7 +480,13 @@ func (s *Server) StartAdopt() {
 			if err != nil {
 				continue
 			}
-			req = req.WithContext(swaputil.SetContext(req.Context(), swaputil.ReqContextData{Model: modelID, ModelID: modelID, Metadata: make(map[string]string)}))
+			// "adopt" marks this so the scheduler's memory-admission gate skips it:
+			// adopt attaches to an ALREADY-RUNNING container and spends no new
+			// memory, so gating it (and 503-refusing an unsized/over-budget model)
+			// would leave a live container invisible to the ledger — the exact
+			// restart-storm under-count admission exists to prevent. Preload
+			// (startPreload) is NOT marked: it starts a model and must be gated.
+			req = req.WithContext(swaputil.SetContext(req.Context(), swaputil.ReqContextData{Model: modelID, ModelID: modelID, Metadata: map[string]string{"adopt": "1"}}))
 			// A running container makes the model's `docker compose up -d` cmd a
 			// no-op and `docker wait` attaches; the health check passes and the
 			// process becomes StateReady, so eviction planning sees it as live.

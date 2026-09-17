@@ -159,22 +159,31 @@ func (c *ProfileConfig) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type Config struct {
-	Tailcat            *TailcatConfig            `yaml:"tailcat"`
-	HealthCheckTimeout int                       `yaml:"healthCheckTimeout"`
-	LogRequests        bool                      `yaml:"logRequests"`
-	LogLevel           string                    `yaml:"logLevel"`
-	LogTimeFormat      string                    `yaml:"logTimeFormat"`
-	LogToStdout        string                    `yaml:"logToStdout"`
-	MetricsMaxInMemory int                       `yaml:"metricsMaxInMemory"`
-	CaptureBuffer      int                       `yaml:"captureBuffer"`
-	Store              *Store                    `yaml:"store"`
-	UI                 UIConfig                  `yaml:"ui"`
-	Performance        PerformanceConfig         `yaml:"performance"`
-	GlobalTTL          int                       `yaml:"globalTTL"`
-	UnloadTimeout      int                       `yaml:"unloadTimeout"`
-	Models             map[string]ModelConfig    `yaml:"models"` /* key is model ID */
-	Profiles           map[string]ProfileConfig  `yaml:"profiles"`
-	Selectors          map[string]SelectorConfig `yaml:"selectors"`
+	Tailcat            *TailcatConfig    `yaml:"tailcat"`
+	HealthCheckTimeout int               `yaml:"healthCheckTimeout"`
+	LogRequests        bool              `yaml:"logRequests"`
+	LogLevel           string            `yaml:"logLevel"`
+	LogTimeFormat      string            `yaml:"logTimeFormat"`
+	LogToStdout        string            `yaml:"logToStdout"`
+	MetricsMaxInMemory int               `yaml:"metricsMaxInMemory"`
+	CaptureBuffer      int               `yaml:"captureBuffer"`
+	Store              *Store            `yaml:"store"`
+	UI                 UIConfig          `yaml:"ui"`
+	Performance        PerformanceConfig `yaml:"performance"`
+	GlobalTTL          int               `yaml:"globalTTL"`
+	UnloadTimeout      int               `yaml:"unloadTimeout"`
+
+	// MemoryPool is the usable unified-memory budget in bytes for the FIFO
+	// scheduler's memory-admission gate (box-wide). NOT auto-detected —
+	// MemAvailable under-reports free on GB10 unified memory. 0 disables memory
+	// admission entirely (no behavior change vs. a build without it).
+	MemoryPool int64 `yaml:"memoryPool"`
+	// MemoryReserve is headroom in bytes kept free below MemoryPool: a load is
+	// admitted only when Σ resident ceilings + new ceiling ≤ MemoryPool − MemoryReserve.
+	MemoryReserve int64                     `yaml:"memoryReserve"`
+	Models        map[string]ModelConfig    `yaml:"models"` /* key is model ID */
+	Profiles      map[string]ProfileConfig  `yaml:"profiles"`
+	Selectors     map[string]SelectorConfig `yaml:"selectors"`
 
 	// routing is the canonical source for swap/scheduling configuration.
 	// New code must read Routing, never the backwards-compat fields below.

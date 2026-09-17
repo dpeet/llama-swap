@@ -143,7 +143,7 @@ func (f *fakeEffects) startsFor(modelID string) int {
 }
 
 func newFIFO(planner Swapper, eff Effects) *FIFO {
-	return NewFIFO("test", logmon.NewWriter(io.Discard), planner, config.FifoConfig{}, nil, eff)
+	return NewFIFO("test", logmon.NewWriter(io.Discard), planner, config.FifoConfig{}, nil, 0, 0, eff)
 }
 
 func req(model string) HandlerReq {
@@ -252,7 +252,7 @@ func TestFIFO_GrantSetsPriorityMetadata(t *testing.T) {
 	eff := newFakeEffects()
 	eff.states["a"] = process.StateReady
 	cfg := config.FifoConfig{Priority: map[string]int{"a": 7}}
-	s := NewFIFO("test", logmon.NewWriter(io.Discard), &stubPlanner{}, cfg, nil, eff)
+	s := NewFIFO("test", logmon.NewWriter(io.Discard), &stubPlanner{}, cfg, nil, 0, 0, eff)
 
 	ctx := swaputil.SetContext(context.Background(), swaputil.ReqContextData{ModelID: "a", Metadata: make(map[string]string)})
 	s.OnRequest(HandlerReq{Model: "a", Ctx: ctx})
@@ -624,7 +624,7 @@ func TestFIFO_PriorityQueueOrder(t *testing.T) {
 	// loading collides with z's in-flight swap and parks in the queue.
 	planner := &stubPlanner{evict: map[string][]string{"z": {"A", "B", "C", "D"}}}
 	cfg := config.FifoConfig{Priority: map[string]int{"A": 10, "B": 5, "C": 5, "D": 1}}
-	s := NewFIFO("test", logmon.NewWriter(io.Discard), planner, cfg, nil, eff)
+	s := NewFIFO("test", logmon.NewWriter(io.Discard), planner, cfg, nil, 0, 0, eff)
 
 	s.OnRequest(req("z")) // StartSwap(z, [A,B,C,D])
 
@@ -744,7 +744,7 @@ func newFIFOWithLimit(t *testing.T, model string, limit int) (*FIFO, *fakeEffect
 	models := map[string]config.ModelConfig{
 		model: {ConcurrencyLimit: limit},
 	}
-	s := NewFIFO("test", logmon.NewWriter(io.Discard), &stubPlanner{}, config.FifoConfig{}, models, eff)
+	s := NewFIFO("test", logmon.NewWriter(io.Discard), &stubPlanner{}, config.FifoConfig{}, models, 0, 0, eff)
 	return s, eff
 }
 
@@ -838,7 +838,7 @@ func TestFIFO_ConcurrencyLimit_SwapWaiters(t *testing.T) {
 	models := map[string]config.ModelConfig{
 		"a": {ConcurrencyLimit: 2},
 	}
-	s := NewFIFO("test", logmon.NewWriter(io.Discard), &stubPlanner{}, config.FifoConfig{}, models, eff)
+	s := NewFIFO("test", logmon.NewWriter(io.Discard), &stubPlanner{}, config.FifoConfig{}, models, 0, 0, eff)
 
 	// Three requests arrive while model is loading: one starts swap, two join.
 	r1 := req("a")
@@ -878,7 +878,7 @@ func TestFIFO_ConcurrencyLimit_QueuedWaitersReserveCapacity(t *testing.T) {
 		"a": {ConcurrencyLimit: 2},
 		"b": {},
 	}
-	s := NewFIFO("test", logmon.NewWriter(io.Discard), &stubPlanner{evict: map[string][]string{"a": {"b"}}}, config.FifoConfig{}, models, eff)
+	s := NewFIFO("test", logmon.NewWriter(io.Discard), &stubPlanner{evict: map[string][]string{"a": {"b"}}}, config.FifoConfig{}, models, 0, 0, eff)
 
 	bReq := req("b")
 	aReq1 := req("a")
@@ -924,7 +924,7 @@ func TestFIFO_ConcurrencyLimit_CancelledQueuedWaiterReleasesReservation(t *testi
 		"a": {ConcurrencyLimit: 1},
 		"b": {},
 	}
-	s := NewFIFO("test", logmon.NewWriter(io.Discard), &stubPlanner{evict: map[string][]string{"a": {"b"}}}, config.FifoConfig{}, models, eff)
+	s := NewFIFO("test", logmon.NewWriter(io.Discard), &stubPlanner{evict: map[string][]string{"a": {"b"}}}, config.FifoConfig{}, models, 0, 0, eff)
 
 	bReq := req("b")
 	cancelledReq := reqCh("a")
@@ -944,5 +944,198 @@ func TestFIFO_ConcurrencyLimit_CancelledQueuedWaiterReleasesReservation(t *testi
 
 	if got := len(s.queued); got != 1 {
 		t.Fatalf("queue len=%d want 1 after cancel and retry", got)
+	}
+}
+
+// ── Memory admission (Phase 1) ──────────────────────────────────────────────
+
+func newFIFOMem(t *testing.T, planner Swapper, models map[string]config.ModelConfig, pool, reserve int64) (*FIFO, *fakeEffects) {
+	t.Helper()
+	eff := newFakeEffects()
+	return NewFIFO("test", logmon.NewWriter(io.Discard), planner, config.FifoConfig{}, models, pool, reserve, eff), eff
+}
+
+// assertMemoryRefused asserts a 503 memory refusal was delivered to model via
+// GrantError (the post-admission path), not via the admission channel.
+func assertMemoryRefused(t *testing.T, eff *fakeEffects, model string) {
+	t.Helper()
+	for _, g := range eff.grants {
+		if g.model == model && g.err != nil {
+			var me swaputil.MemoryAdmissionError
+			if errors.As(g.err, &me) {
+				return
+			}
+		}
+	}
+	t.Fatalf("expected a MemoryAdmissionError refusal for %s; grants=%+v", model, eff.grants)
+}
+
+func adoptReq(model string) HandlerReq {
+	r := req(model)
+	r.Ctx = swaputil.SetContext(context.Background(), swaputil.ReqContextData{Model: model, ModelID: model, Metadata: map[string]string{"adopt": "1"}})
+	return r
+}
+
+func TestFIFO_Memory_AdoptBypassesGate(t *testing.T) {
+	// An adopt attach to an over-budget model must NOT be refused: it attaches to
+	// an already-running container and spends no new memory. Gating it would 503 a
+	// live model and leave it invisible to the ledger (the OOM-#2 restart path).
+	models := map[string]config.ModelConfig{"big": {MemoryCeiling: 500}} // 500 > pool 100
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["big"] = process.StateStopped
+	s.OnRequest(adoptReq("big"))
+	if eff.errored("big") != 0 {
+		t.Fatalf("adopt refused by the memory gate; errored=%d want 0", eff.errored("big"))
+	}
+	if eff.startsFor("big") != 1 {
+		t.Fatalf("startsFor(big)=%d want 1 (adopt must proceed to attach)", eff.startsFor("big"))
+	}
+}
+
+func TestFIFO_Memory_EvictCreditAllowsSwap(t *testing.T) {
+	// b resident (60), a wants in (60), pool 100: a+b=120 won't fit, but the
+	// planner evicts b, so a fits once the eviction is credited.
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"b": {MemoryCeiling: 60},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{evict: map[string][]string{"a": {"b"}}}, models, 100, 0)
+	eff.states["b"] = process.StateReady
+	eff.states["a"] = process.StateStopped
+	s.OnRequest(reqCh("a"))
+	if eff.startsFor("a") != 1 {
+		t.Fatalf("startsFor(a)=%d want 1 (a fits once b is evicted)", eff.startsFor("a"))
+	}
+}
+
+func TestFIFO_Memory_ReserveReducesBudget(t *testing.T) {
+	// pool 100, reserve 30 → budget 70. a(60) fits alone, but with small(20)
+	// resident and not evicted, 60+20=80 > 70 → a queues (not never-fits).
+	models := map[string]config.ModelConfig{
+		"a":     {MemoryCeiling: 60},
+		"small": {MemoryCeiling: 20},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 30)
+	eff.states["small"] = process.StateReady
+	eff.states["a"] = process.StateStopped
+	s.OnRequest(reqCh("a"))
+	if eff.startsFor("a") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(a)=%d queued=%d want 0/1 (60+20=80 > budget 70)", eff.startsFor("a"), len(s.queued))
+	}
+}
+
+func TestFIFO_Memory_AdmitsWhenFits(t *testing.T) {
+	models := map[string]config.ModelConfig{"a": {MemoryCeiling: 50}}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateStopped // known, not running
+	r := req("a")
+	s.OnRequest(r)
+	assertAdmitted(t, r)
+	if eff.startsFor("a") != 1 {
+		t.Fatalf("startsFor(a)=%d want 1", eff.startsFor("a"))
+	}
+}
+
+func TestFIFO_Memory_NeverFitsRefusesAndReleases(t *testing.T) {
+	models := map[string]config.ModelConfig{"a": {MemoryCeiling: 200}} // 200 > pool 100
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateStopped
+	r := req("a")
+	s.OnRequest(r)
+	assertAdmitted(t, r) // admit() ran before the memory gate
+	assertMemoryRefused(t, eff, "a")
+	if eff.startsFor("a") != 0 {
+		t.Fatalf("startsFor(a)=%d want 0", eff.startsFor("a"))
+	}
+	if len(s.reserved) != 0 {
+		t.Fatalf("reserved=%v want empty (slot must be released)", s.reserved)
+	}
+}
+
+func TestFIFO_Memory_UnknownCeilingRefused(t *testing.T) {
+	models := map[string]config.ModelConfig{"a": {}} // no ceiling configured
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateStopped
+	r := req("a")
+	s.OnRequest(r)
+	assertMemoryRefused(t, eff, "a")
+	if len(s.reserved) != 0 {
+		t.Fatalf("reserved=%v want empty", s.reserved)
+	}
+}
+
+func TestFIFO_Memory_PoolZeroIsNoOp(t *testing.T) {
+	models := map[string]config.ModelConfig{"a": {}} // no ceiling, but gate off
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 0, 0)
+	eff.states["a"] = process.StateStopped
+	r := req("a")
+	s.OnRequest(r)
+	assertAdmitted(t, r)
+	if eff.startsFor("a") != 1 {
+		t.Fatalf("startsFor(a)=%d want 1 (gate off must admit)", eff.startsFor("a"))
+	}
+}
+
+func TestFIFO_Memory_TransientOverQueuesThenDrains(t *testing.T) {
+	// a and b fit alone (60 each) but not together (120 > 100). b is resident and
+	// not evicted; a request for a queues, then starts once b frees and drains.
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"b": {MemoryCeiling: 60},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["b"] = process.StateReady   // resident
+	eff.states["a"] = process.StateStopped // wanted
+	r := reqCh("a")
+	s.OnRequest(r)
+	assertAdmitted(t, r)
+	if eff.startsFor("a") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(a)=%d queued=%d want 0/1 (should queue)", eff.startsFor("a"), len(s.queued))
+	}
+	delete(eff.states, "b") // b leaves → memory frees
+	s.drainQueue()
+	if eff.startsFor("a") != 1 || len(s.queued) != 0 {
+		t.Fatalf("startsFor(a)=%d queued=%d want 1/0 after b freed", eff.startsFor("a"), len(s.queued))
+	}
+}
+
+func TestFIFO_Memory_TOCTOU_SecondLoadCannotAlsoPass(t *testing.T) {
+	// a and b fit alone (60) but not together. a starts a swap (its target enters
+	// the active set), so b's fit check must count a as resident-to-be and NOT start.
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"b": {MemoryCeiling: 60},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateStopped
+	eff.states["b"] = process.StateStopped
+	s.OnRequest(reqCh("a"))
+	if eff.startsFor("a") != 1 {
+		t.Fatalf("startsFor(a)=%d want 1", eff.startsFor("a"))
+	}
+	s.OnRequest(reqCh("b"))
+	if eff.startsFor("b") != 0 {
+		t.Fatalf("startsFor(b)=%d want 0 (a's in-flight target must count against b)", eff.startsFor("b"))
+	}
+}
+
+func TestFIFO_Memory_DrainDropsNeverFitsAndReleases(t *testing.T) {
+	// Defensive: a never-fits request sitting in the queue is dropped with a 503
+	// on drain and its reservation released, never stranded in remaining.
+	models := map[string]config.ModelConfig{"big": {MemoryCeiling: 200}} // > pool
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["big"] = process.StateStopped
+	r := reqCh("big")
+	if !s.admit(r) { // reserve a slot as OnRequest would
+		t.Fatal("admit failed")
+	}
+	s.enqueue(r) // place it in the queue directly
+	s.drainQueue()
+	assertMemoryRefused(t, eff, "big")
+	if len(s.queued) != 0 {
+		t.Fatalf("queued=%d want 0 (never-fits must be dropped)", len(s.queued))
+	}
+	if len(s.reserved) != 0 {
+		t.Fatalf("reserved=%v want empty (slot must be released)", s.reserved)
 	}
 }
