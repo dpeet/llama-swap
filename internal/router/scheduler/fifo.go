@@ -101,6 +101,11 @@ func NewFIFO(name string, logger *logmon.Monitor, planner Swapper, cfg config.Fi
 // siblings, waiting for ready) is deferred to a swap goroutine and reported back
 // via OnSwapDone.
 //
+// Two refusals are answered on the ADMISSION channel rather than after
+// admission: an unknown model, and a new load the memory budget can never fit
+// (step (1.5) in the body). That seam is before the caller can start a loading
+// stream, which is what keeps them clean status codes.
+//
 // The decision tree, in order:
 //
 //  1. Unknown model — respond with ErrModelNotFound and move on.
@@ -124,40 +129,60 @@ func (s *FIFO) OnRequest(req HandlerReq) {
 		return
 	}
 
+	// The eviction picture is built BEFORE admission because the hard memory
+	// refusal below needs it. A request joining an in-flight swap for the same
+	// model does not: that swap's memory was already admitted.
+	sw, joining := s.active[req.Model]
+	var (
+		running, evict []string
+		fastPath       bool
+	)
+	if !joining {
+		running = s.runningSet(req.Model)
+		evict = s.planner.EvictionFor(req.Model, running)
+		// (3) Fast path: ready, nothing to evict, and nobody is evicting us.
+		fastPath = state == process.StateReady && len(evict) == 0 && !collidesWith(req.Model, evict, s.active)
+	}
+
+	// (1.5) Hard memory refusal, decided BEFORE admission succeeds. The model's
+	// own ceiling exceeds the budget (or is unknown), so no eviction and no
+	// waiting can ever help — this is a 503 the scheduler can answer at once.
+	// Answering it on the admission channel is what keeps it a clean 503: past
+	// admit(), a streaming caller has already been handed 200 + SSE headers by
+	// the loading writer, and the refusal can then only be framed into the
+	// stream (#1029's failure-reported-as-success shape). This is the same
+	// pre-stream seam the concurrency-limit rejection uses. neverFits implies
+	// !fits, so the gate after admission only has the transient case left.
+	if !joining && !fastPath && !isAdopt(req) && s.neverFits(req.Model) {
+		s.logger.Debugf("%s: refusing model %s (never fits memory budget)", s.name, req.Model)
+		s.rejectAdmission(req, swaputil.MemoryAdmissionError{Message: s.memoryRejectMessage(req.Model)})
+		return
+	}
+
 	if !s.admit(req) {
 		return
 	}
 
 	// (2) Join an in-flight swap for the same model.
-	if sw, ok := s.active[req.Model]; ok {
+	if joining {
 		s.logger.Debugf("%s: joining in-flight swap for model %s (%d waiters)", s.name, req.Model, len(sw.waiters)+1)
 		sw.waiters = append(sw.waiters, req)
 		return
 	}
 
-	running := s.runningSet(req.Model)
-	evict := s.planner.EvictionFor(req.Model, running)
-
-	// (3) Fast path: ready, nothing to evict, and nobody is evicting us.
-	if state == process.StateReady && len(evict) == 0 && !collidesWith(req.Model, evict, s.active) {
+	// (3) Fast path.
+	if fastPath {
 		s.logger.Debugf("%s: fast-path serving model %s (already ready)", s.name, req.Model)
 		s.grantHandler(req, req.Model)
 		return
 	}
 
 	// Memory admission: a NEW load must fit the pool once the evict set frees.
-	// Skipped above — an already-ready model (fast path) is already resident.
-	// This runs AFTER admit() (which already reserved a slot), so a rejection
-	// MUST use grantError (releases the reservation + notifies via Respond),
-	// never rejectAdmission (which would double-send to Admit and leak the slot).
+	// Only the transient case reaches here (the never-fits half was answered
+	// before admission), so it waits for memory to free rather than refusing.
 	if !isAdopt(req) && !s.fits(req.Model, evict, running) {
-		if s.neverFits(req.Model) {
-			s.logger.Debugf("%s: refusing model %s (never fits memory budget)", s.name, req.Model)
-			s.grantError(req, swaputil.MemoryAdmissionError{Message: s.memoryRejectMessage(req.Model)})
-		} else {
-			s.logger.Debugf("%s: queuing model %s (does not fit now; waiting for memory to free)", s.name, req.Model)
-			s.enqueue(req)
-		}
+		s.logger.Debugf("%s: queuing model %s (does not fit now; waiting for memory to free)", s.name, req.Model)
+		s.enqueue(req)
 		return
 	}
 
