@@ -180,6 +180,21 @@ func assertAdmitted(t *testing.T, req HandlerReq) {
 	}
 }
 
+// assertAdmission503 asserts the request was refused on the ADMISSION channel
+// with a MemoryAdmissionError. The channel matters as much as the error: it is
+// the only seam before a streaming caller commits its 200 + SSE headers.
+func assertAdmission503(t *testing.T, req HandlerReq) {
+	t.Helper()
+	err := admitErr(t, req)
+	var memErr swaputil.MemoryAdmissionError
+	if !errors.As(err, &memErr) {
+		t.Fatalf("admission err=%v want MemoryAdmissionError", err)
+	}
+	if memErr.StatusCode() != http.StatusServiceUnavailable {
+		t.Fatalf("StatusCode()=%d want 503", memErr.StatusCode())
+	}
+}
+
 func assertAdmission429(t *testing.T, req HandlerReq) {
 	t.Helper()
 	var httpErr swaputil.HTTPError
@@ -1036,19 +1051,26 @@ func TestFIFO_Memory_AdmitsWhenFits(t *testing.T) {
 	}
 }
 
-func TestFIFO_Memory_NeverFitsRefusesAndReleases(t *testing.T) {
+// TestFIFO_Memory_NeverFitsRefusedAtAdmission covers todo 1.7 (C1) at the
+// scheduler level: a never-fits load is refused on the admission channel, before
+// admit() succeeds, so the router never lets a streaming caller commit a 200 and
+// has to frame the 503 into an SSE stream. Nothing is reserved, so nothing needs
+// releasing.
+func TestFIFO_Memory_NeverFitsRefusedAtAdmission(t *testing.T) {
 	models := map[string]config.ModelConfig{"a": {MemoryCeiling: 200}} // 200 > pool 100
 	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
 	eff.states["a"] = process.StateStopped
 	r := req("a")
 	s.OnRequest(r)
-	assertAdmitted(t, r) // admit() ran before the memory gate
-	assertMemoryRefused(t, eff, "a")
+	assertAdmission503(t, r)
+	if eff.errored("a") != 0 {
+		t.Fatalf("errored(a)=%d want 0 (refusal must not go through the post-admission grant path)", eff.errored("a"))
+	}
 	if eff.startsFor("a") != 0 {
 		t.Fatalf("startsFor(a)=%d want 0", eff.startsFor("a"))
 	}
 	if len(s.reserved) != 0 {
-		t.Fatalf("reserved=%v want empty (slot must be released)", s.reserved)
+		t.Fatalf("reserved=%v want empty (nothing may be reserved for a refused request)", s.reserved)
 	}
 }
 
@@ -1058,9 +1080,47 @@ func TestFIFO_Memory_UnknownCeilingRefused(t *testing.T) {
 	eff.states["a"] = process.StateStopped
 	r := req("a")
 	s.OnRequest(r)
-	assertMemoryRefused(t, eff, "a")
+	assertAdmission503(t, r)
+	if eff.startsFor("a") != 0 {
+		t.Fatalf("startsFor(a)=%d want 0", eff.startsFor("a"))
+	}
 	if len(s.reserved) != 0 {
 		t.Fatalf("reserved=%v want empty", s.reserved)
+	}
+}
+
+// TestFIFO_Memory_ResidentModelIsNotRefused guards the pre-admission refusal's
+// scope: it applies to NEW loads only. A model that is already resident (fast
+// path) keeps being served even if its configured ceiling could not be admitted
+// today — refusing there would strand a live model behind a 503.
+func TestFIFO_Memory_ResidentModelIsNotRefused(t *testing.T) {
+	models := map[string]config.ModelConfig{"a": {MemoryCeiling: 200}} // > pool
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateReady
+	r := req("a")
+	s.OnRequest(r)
+	assertAdmitted(t, r)
+	if eff.served("a") != 1 {
+		t.Fatalf("served(a)=%d want 1 (a resident model must still be served)", eff.served("a"))
+	}
+}
+
+// TestFIFO_Memory_JoiningSwapIsNotRefused is the other half of that scope: a
+// second caller for a model whose swap is already in flight joins it rather than
+// being re-gated — the memory for that load was admitted when the swap started.
+func TestFIFO_Memory_JoiningSwapIsNotRefused(t *testing.T) {
+	models := map[string]config.ModelConfig{"a": {MemoryCeiling: 60}}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateStopped
+	s.OnRequest(reqCh("a"))
+	if eff.startsFor("a") != 1 {
+		t.Fatalf("startsFor(a)=%d want 1", eff.startsFor("a"))
+	}
+	second := reqCh("a")
+	s.OnRequest(second)
+	assertAdmitted(t, second)
+	if got := len(s.active["a"].waiters); got != 2 {
+		t.Fatalf("waiters=%d want 2 (second caller must join the in-flight swap)", got)
 	}
 }
 

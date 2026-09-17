@@ -3,6 +3,7 @@
 package process
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -83,6 +84,66 @@ func TestProcessCommand_StopForkingWrapper(t *testing.T) {
 		t.Errorf("after Stop: expected state %s, got %s", StateStopped, got)
 	}
 
+	select {
+	case <-runErr:
+	case <-time.After(testReturnTimeout):
+		t.Errorf("Run did not return after Stop")
+	}
+}
+
+// TestProcessCommand_StopReturnsErrorOnForcedKill pins the contract todo 1.6
+// (H2) depends on: an upstream that outlives its graceful window is SIGKILLed,
+// and Stop must SAY so instead of returning nil. A forced kill takes down
+// llama-swap's supervisor without ever observing the upstream exit — for a model
+// whose cmd merely attaches to a container, the container (and its memory)
+// survives. The router's memory ledger credits an eviction as freed before it
+// loads the next model, so a silent nil there is what lets two ceilings land on
+// one pool.
+func TestProcessCommand_StopReturnsErrorOnForcedKill(t *testing.T) {
+	dir := t.TempDir()
+	ready := filepath.Join(dir, "ignore.ready")
+
+	// Ignore SIGTERM outright, so only the SIGKILL in killProcess's step 3 can
+	// end this process. The ready file is written after the trap is installed so
+	// the test cannot race the signal ahead of it.
+	script := filepath.Join(dir, "ignore-term.sh")
+	body := fmt.Sprintf(
+		"#!/bin/bash\ntrap '' SIGTERM\necho ready > %q\nwhile true; do sleep 0.1; done\n",
+		ready,
+	)
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	p := newProcessCommand(t, config.ModelConfig{
+		Cmd:           script,
+		Proxy:         "http://127.0.0.1:1", // unused: health check disabled
+		CheckEndpoint: "none",
+	})
+	p.waitDelay = 200 * time.Millisecond
+
+	runErr := runAsync(t, p)
+
+	trapDeadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(trapDeadline) {
+			t.Fatalf("script did not install SIGTERM trap in time")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	err := p.Stop(300 * time.Millisecond)
+	if !errors.Is(err, ErrForcedKill) {
+		t.Fatalf("Stop err=%v want ErrForcedKill", err)
+	}
+	// The process is still torn down — the error reports HOW, it does not mean
+	// the stop was skipped.
+	if got := p.State(); got != StateStopped {
+		t.Errorf("after Stop: expected state %s, got %s", StateStopped, got)
+	}
 	select {
 	case <-runErr:
 	case <-time.After(testReturnTimeout):

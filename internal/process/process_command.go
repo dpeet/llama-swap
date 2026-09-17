@@ -22,6 +22,16 @@ import (
 
 var ErrStartAborted = fmt.Errorf("aborted")
 
+// ErrForcedKill is returned by Stop/Detach when the graceful window expired and
+// the process group had to be SIGKILLed. It means llama-swap's own supervisor is
+// gone but the upstream was never observed exiting on its own: when the upstream
+// is a container the cmd attached to (`docker compose up`), killing the client
+// does not kill the container, so its memory may still be held. Callers that
+// depend on a stop actually FREEING resources (the memory-admission ledger in
+// the router, which credits an eviction before loading the target) must treat
+// this as a failed stop rather than a completed one.
+var ErrForcedKill = fmt.Errorf("graceful stop timed out; process group force-killed")
+
 // healthCheckKey marks requests issued by the health check loop, which polls
 // the upstream through the same reverse proxy. Their failures are the expected
 // shape of a model still booting, so they must not be logged as proxy errors.
@@ -245,7 +255,7 @@ func (p *ProcessCommand) run() {
 			setState(StateShutdown)
 			if cmd != nil {
 				p.handler.Store(nil)
-				p.killProcess(cmd, cmdCancel, cmdDone, parentCancelGraceTimeout, false)
+				_ = p.killProcess(cmd, cmdCancel, cmdDone, parentCancelGraceTimeout, false)
 				cmd = nil
 				cmdDone = nil
 				cmdCancel = nil
@@ -327,8 +337,10 @@ func (p *ProcessCommand) run() {
 			}()
 
 			// pendingStop holds a Stop request that arrived mid-start, so we
-			// can respond to it AFTER we've finished tearing the start down.
+			// can respond to it AFTER we've finished tearing the start down;
+			// pendingStopErr carries that teardown's outcome (see ErrForcedKill).
 			var pendingStop *stopReq
+			var pendingStopErr error
 			select {
 			// doStart finished on its own — either successfully (latch
 			// cmd/handler and move to Ready) or with an error (back to
@@ -394,7 +406,7 @@ func (p *ProcessCommand) run() {
 				cancelStart()
 				res := <-resultCh
 				if res.cmd != nil {
-					p.killProcess(res.cmd, res.cancel, res.cmdDone, stop.timeout, stop.detach)
+					pendingStopErr = p.killProcess(res.cmd, res.cancel, res.cmdDone, stop.timeout, stop.detach)
 				}
 				setState(StateStopped)
 				notifyWaiters(ErrStartAborted)
@@ -414,7 +426,7 @@ func (p *ProcessCommand) run() {
 				setState(StateShutdown)
 				res := <-resultCh
 				if res.cmd != nil {
-					p.killProcess(res.cmd, res.cancel, res.cmdDone, parentCancelGraceTimeout, false)
+					_ = p.killProcess(res.cmd, res.cancel, res.cmdDone, parentCancelGraceTimeout, false)
 				}
 				notifyWaiters(fmt.Errorf("[%s] shutdown", p.id))
 				respondRun(fmt.Errorf("[%s] shutdown", p.id))
@@ -424,15 +436,16 @@ func (p *ProcessCommand) run() {
 			// context is released even on the success path (govet leak check).
 			cancelStart()
 			if pendingStop != nil {
-				pendingStop.respond <- nil
+				pendingStop.respond <- pendingStopErr
 			}
 
 		// Stop: tear down a running process.
 		case stop := <-p.stopCh:
 			toreDown := cmd != nil
+			var stopErr error
 			if cmd != nil {
 				setState(StateStopping)
-				p.killProcess(cmd, cmdCancel, cmdDone, stop.timeout, stop.detach)
+				stopErr = p.killProcess(cmd, cmdCancel, cmdDone, stop.timeout, stop.detach)
 				cmd = nil
 				cmdDone = nil
 				cmdCancel = nil
@@ -451,7 +464,7 @@ func (p *ProcessCommand) run() {
 				notifyWaiters(fmt.Errorf("[%s] stopped", p.id))
 			}
 			respondRun(nil)
-			stop.respond <- nil
+			stop.respond <- stopErr
 		}
 	}
 }
@@ -557,7 +570,7 @@ func (p *ProcessCommand) doStart(startCtx context.Context, healthCheckTimeout ti
 		// Honor a detach requested by the stop that aborted this start (set in
 		// the stopCh handler before cancelStart); an intrinsic failure leaves
 		// pendingDetach false, so CmdStop still runs to free a half-started model.
-		p.killProcess(cmd, cmdCancel, cmdDone, 5*time.Second, p.pendingDetach.Load())
+		_ = p.killProcess(cmd, cmdCancel, cmdDone, 5*time.Second, p.pendingDetach.Load())
 		return startResult{err: err}
 	}
 	prematureExit := func() startResult {
@@ -684,9 +697,13 @@ func (p *ProcessCommand) sendStopSignal(cmd *exec.Cmd) error {
 // cancel() is still invoked (deferred) to release the context, but only after
 // the process has exited and os/exec's ctx watcher has already torn down, so it
 // never re-fires cmd.Cancel.
-func (p *ProcessCommand) killProcess(cmd *exec.Cmd, cancel context.CancelFunc, cmdDone <-chan struct{}, gracefulTimeout time.Duration, detach bool) {
+//
+// It returns nil when the process exited within the graceful window, and
+// ErrForcedKill when step 3 had to fire: the upstream was never seen exiting on
+// its own, so the caller cannot assume its resources were released.
+func (p *ProcessCommand) killProcess(cmd *exec.Cmd, cancel context.CancelFunc, cmdDone <-chan struct{}, gracefulTimeout time.Duration, detach bool) error {
 	if cancel == nil {
-		return
+		return nil
 	}
 	defer cancel()
 
@@ -718,7 +735,7 @@ func (p *ProcessCommand) killProcess(cmd *exec.Cmd, cancel context.CancelFunc, c
 
 	select {
 	case <-cmdDone:
-		return
+		return nil
 	case <-timer.C:
 	}
 
@@ -728,6 +745,8 @@ func (p *ProcessCommand) killProcess(cmd *exec.Cmd, cancel context.CancelFunc, c
 		_ = killProcessTree(cmd)
 	}
 	<-cmdDone
+	p.proxyLogger.Warnf("[%s] graceful stop exceeded %v; process group force-killed (upstream may still hold its resources)", p.id, gracefulTimeout)
+	return ErrForcedKill
 }
 
 func (p *ProcessCommand) ID() string {
