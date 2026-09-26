@@ -72,9 +72,10 @@ type fakeProcess struct {
 	stopBlock chan struct{}
 
 	// stopErr, when non-nil, makes Stop fail with it AND leave the process in
-	// StateStopping — the shape of a real forced kill (process.ErrForcedKill):
-	// llama-swap's supervisor is gone but the upstream was never seen exiting,
-	// so its memory may still be held.
+	// StateStopping, modelling a stop whose upstream may still hold memory so
+	// the process keeps reporting as resident. This is not what a real
+	// ProcessCommand does on a forced kill: it returns process.ErrForcedKill but
+	// still ends in StateStopped (see TestProcessCommand_StopReturnsErrorOnForcedKill).
 	stopErr error
 
 	runCalls     atomic.Int32

@@ -205,9 +205,13 @@ func tryNvidiaSmi(ctx context.Context, every time.Duration, logger *logmon.Monit
 	return ch, nil
 }
 
-// unifiedMemoryGpuNames matches NVIDIA GPU/SoC names known to share system RAM
-// instead of having a dedicated framebuffer: Grace-Blackwell/Grace-Hopper
-// superchips and Jetson/Tegra boards.
+// unifiedMemoryGpuNames lists the NVIDIA GPU/SoC names allowed to take the
+// system-RAM fallback above when nvidia-smi reports memory as N/A. GB10 and
+// Jetson/Tegra boards (Orin, Thor, Xavier) have no dedicated GPU memory and
+// share system RAM. GB200, GB300 and GH200 are different: their GPUs carry
+// their own HBM (coherently linked to the Grace CPU's LPDDR), and nvidia-smi
+// normally reports its size, so the MemTotalMB == 0 guard keeps them off the
+// fallback in practice.
 var unifiedMemoryGpuNames = []string{"GB10", "GB200", "GB300", "GH200", "JETSON", "TEGRA", "ORIN", "THOR", "XAVIER"}
 
 func isUnifiedMemoryGpu(name string) bool {
@@ -223,10 +227,11 @@ func isUnifiedMemoryGpu(name string) bool {
 // sumNvidiaComputeAppsMemMB sums per-process GPU memory (MB) reported by
 // nvidia-smi for the given GPU UUID. Used as a memory.used fallback on
 // unified-memory GPUs, where the aggregate memory.used/memory.total fields are
-// unavailable. Scoping by gpu_uuid keeps the figure correct on a multi-GPU host
-// (the PR's open review nit); malformed rows are skipped rather than aborting
-// the sum. Returns ok=true whenever the query itself succeeded, so zero running
-// compute apps correctly reports zero GPU memory used.
+// unavailable. Scoping by gpu_uuid keeps the figure correct on a multi-GPU host,
+// where the query lists compute apps on every GPU; malformed rows are skipped
+// rather than aborting the sum. Returns ok=true whenever the query itself
+// succeeded, so zero running compute apps correctly reports zero GPU memory
+// used.
 func sumNvidiaComputeAppsMemMB(ctx context.Context, gpuUUID string) (int, bool) {
 	pollCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
