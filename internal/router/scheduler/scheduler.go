@@ -73,6 +73,8 @@ type Scheduler interface {
 	// OnSelfStop handles a process that stopped without the router asking (a
 	// TTL unload or an upstream crash). forced reports that the stop had to
 	// force-kill (process.ErrForcedKill), so its upstream may still hold memory.
+	// The report is asynchronous: by the time it arrives the forced stop may
+	// already have been recorded through Effects.TakeForcedStops.
 	OnSelfStop(modelID string, forced bool)
 }
 
@@ -100,8 +102,18 @@ type Effects interface {
 	// StopProcesses stops the named processes in parallel and blocks until all
 	// have stopped. Unknown IDs are skipped. It returns the IDs whose stop had
 	// to force-kill (process.ErrForcedKill): their upstream may still hold
-	// memory although the process now reports stopped.
+	// memory although the process now reports stopped. That includes a process
+	// Stop found already stopped by a stop that force-killed (a TTL unload it
+	// waited for), whose Stop itself returns nil (process.TakeForcedStop).
 	StopProcesses(timeout time.Duration, ids []string) (forced []string)
+	// TakeForcedStops returns the models, except those in exclude, that read
+	// Stopped and whose last stop force-killed without anyone having taken
+	// that report yet (process.TakeForcedStop), and takes it. It is how the
+	// scheduler learns of a forced TTL stop before its asynchronous OnSelfStop
+	// arrives. exclude lists the models an in-flight swap is stopping or
+	// starting: that swap takes their reports itself and returns them in its
+	// SwapDone.Leaked, and taking one here would hide it from the swap.
+	TakeForcedStops(exclude []string) []string
 	// WatchLeak starts watching a force-killed model's upstream and reports
 	// OnLeakGone once it is gone. It returns whether a watch was started, i.e.
 	// whether the leak can clear on its own: false when there is nothing that

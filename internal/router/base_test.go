@@ -1595,3 +1595,156 @@ func TestBaseRouter_NeverHealthyLeakNeedsUnload(t *testing.T) {
 		t.Fatalf("c status=%d serveCalls=%d body=%q want 200/1 after a was unloaded", w.Code, pc.serveCalls.Load(), w.Body.String())
 	}
 }
+
+// forcedTTLRouter: a (60) is in its TTL unload (Stopping, holding the fake's
+// op lock like ProcessCommand's run loop inside killProcess); b and c (60 each)
+// cannot fit beside it in a 100 pool, and b's swap evicts a. a's runningCheck
+// reports it running while marker exists, so a leak on a clears only once the
+// test removes marker.
+func forcedTTLRouter(t *testing.T) (b *baseRouter, a, pb, pc *fakeProcess, marker string) {
+	t.Helper()
+	skipWithoutShell(t)
+	marker = filepath.Join(t.TempDir(), "running")
+	if err := os.WriteFile(marker, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	conf := config.Config{
+		HealthCheckTimeout: 5,
+		MemoryPool:         100,
+		Models: map[string]config.ModelConfig{
+			"a": {MemoryCeiling: 60, RunningCheck: fmt.Sprintf("sh -c 'test -e %s'", marker)},
+			"b": {MemoryCeiling: 60},
+			"c": {MemoryCeiling: 60},
+		},
+	}
+	a = newFakeProcess("a")
+	a.autoReady = true
+	a.markReady()
+	a.beginSelfStop()
+	pb = newFakeProcess("b")
+	pb.autoReady = true
+	pc = newFakeProcess("c")
+	pc.autoReady = true
+	b = newTestBaseWithConfig(t, conf, map[string]process.Process{"a": a, "b": pb, "c": pc}, &stubPlanner{
+		evict: map[string][]string{"b": {"a"}},
+	})
+	b.leakProbeInterval = 10 * time.Millisecond
+	return b, a, pb, pc, marker
+}
+
+// assertStillWaiting fails if done closes within a few leak-probe intervals.
+func assertStillWaiting(t *testing.T, w *httptest.ResponseRecorder, done chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-done:
+		t.Fatalf("%s finished while a's force-killed upstream still runs: status=%d body=%q", what, w.Code, w.Body.String())
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// TestBaseRouter_UnloadDuringForcedTTLStopRecordsLeak: c queued behind a's TTL
+// stop. The owner's unload of a waits for that stop, which force-kills, and
+// then gets nil (Stop on a stopped process is a no-op). The unload used to
+// drain c onto a's still-live container before the TTL stop's own report
+// arrived. The forced stop is now taken from the process by the unload itself,
+// and the late report does not start a second watch.
+func TestBaseRouter_UnloadDuringForcedTTLStopRecordsLeak(t *testing.T) {
+	b, a, _, pc, marker := forcedTTLRouter(t)
+
+	w, done := serveAsync(b, newRequest("c"))
+	waitProcessed(t, b.testProcessed, 1)
+
+	unloaded := make(chan struct{})
+	go func() {
+		b.Unload(time.Second, "a")
+		close(unloaded)
+	}()
+	select {
+	case <-unloaded:
+		t.Fatal("unload returned while a's TTL stop was still running")
+	case <-time.After(50 * time.Millisecond):
+	}
+	a.finishSelfStop(process.ErrForcedKill)
+	waitSignal(t, unloaded, "unload of a")
+	waitProcessed(t, b.testProcessed, 1)
+	assertStillWaiting(t, w, done, "c")
+	if got := pc.runCalls.Load(); got != 0 {
+		t.Fatalf("c.runCalls=%d want 0 while a's leak is live", got)
+	}
+
+	gen := b.leakGen
+	a.reportSelfStop(process.ErrForcedKill) // the TTL stop's own report, late
+	waitProcessed(t, b.testProcessed, 1)
+	if b.leakGen != gen {
+		t.Fatalf("leakGen %d -> %d: the late self-stop report restarted a's watch", gen, b.leakGen)
+	}
+
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	waitSignal(t, done, "c request after a's leak cleared")
+	if w.Code != http.StatusOK || pc.serveCalls.Load() != 1 {
+		t.Fatalf("c status=%d serveCalls=%d body=%q want 200/1", w.Code, pc.serveCalls.Load(), w.Body.String())
+	}
+}
+
+// TestBaseRouter_RequestDuringForcedTTLStopWaits: a request for a during its
+// TTL stop used to start a swap whose EnsureReady started a the moment the stop
+// returned, its start command racing the forced stop's teardown of a's own
+// container. It now waits: no start is even asked for until the stop's outcome
+// is known, and after a forced stop not until a's leak clears.
+func TestBaseRouter_RequestDuringForcedTTLStopWaits(t *testing.T) {
+	b, a, _, _, marker := forcedTTLRouter(t)
+
+	w, done := serveAsync(b, newRequest("a"))
+	waitProcessed(t, b.testProcessed, 1)
+	a.finishSelfStop(process.ErrForcedKill)
+	a.reportSelfStop(process.ErrForcedKill)
+	waitProcessed(t, b.testProcessed, 1)
+	assertStillWaiting(t, w, done, "a")
+	select {
+	case <-a.ensureAsked:
+		t.Fatal("a was asked to start while its forced stop's container may still be up")
+	default:
+	}
+
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	waitSignal(t, done, "a request after its leak cleared")
+	if w.Code != http.StatusOK || a.runCalls.Load() != 1 {
+		t.Fatalf("a status=%d runCalls=%d body=%q want 200/1", w.Code, a.runCalls.Load(), w.Body.String())
+	}
+}
+
+// TestBaseRouter_EvictionWaitingOnForcedTTLStopRecordsLeak: b's swap evicts a
+// while a is in its TTL stop. doSwap's Stop waits for that stop and gets nil,
+// so the eviction used to read as completed and b started on top of a's
+// still-live container (a race earlier accepted as a known gap). The forced
+// stop is now taken by doSwap: the swap aborts, a is leaked, and a retry of b
+// waits for a's leak to clear.
+func TestBaseRouter_EvictionWaitingOnForcedTTLStopRecordsLeak(t *testing.T) {
+	b, a, pb, _, marker := forcedTTLRouter(t)
+
+	w1, done1 := serveAsync(b, newRequest("b"))
+	waitProcessed(t, b.testProcessed, 1)
+	a.finishSelfStop(process.ErrForcedKill)
+	waitSignal(t, done1, "first b request")
+	if w1.Code == http.StatusOK || !strings.Contains(w1.Body.String(), "eviction did not complete") {
+		t.Fatalf("first b status=%d body=%q want the failed-eviction error", w1.Code, w1.Body.String())
+	}
+	if got := pb.runCalls.Load(); got != 0 {
+		t.Fatalf("b.runCalls=%d want 0: b must not start on top of a", got)
+	}
+	a.reportSelfStop(process.ErrForcedKill)
+
+	w2, done2 := serveAsync(b, newRequest("b"))
+	assertStillWaiting(t, w2, done2, "b retry")
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	waitSignal(t, done2, "b retry after a's leak cleared")
+	if w2.Code != http.StatusOK || pb.runCalls.Load() != 1 {
+		t.Fatalf("b retry status=%d runCalls=%d body=%q want 200/1", w2.Code, pb.runCalls.Load(), w2.Body.String())
+	}
+}
