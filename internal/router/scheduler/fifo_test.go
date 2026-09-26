@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -1156,6 +1157,30 @@ func TestFIFO_Memory_TransientOverQueuesThenDrains(t *testing.T) {
 	s.drainQueue()
 	if eff.startsFor("a") != 1 || len(s.queued) != 0 {
 		t.Fatalf("startsFor(a)=%d queued=%d want 1/0 after b freed", eff.startsFor("a"), len(s.queued))
+	}
+}
+
+func TestFIFO_Memory_QueuedLoadLogsWarning(t *testing.T) {
+	// A memory-queued load must leave a visible trace naming what it needs and
+	// what is holding the budget, or a request stuck behind a non-evictable
+	// resident waits silently.
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"b": {MemoryCeiling: 70},
+	}
+	logger := logmon.NewWriter(io.Discard)
+	eff := newFakeEffects()
+	s := NewFIFO("test", logger, &stubPlanner{}, config.FifoConfig{}, models, 110, 10, eff)
+	eff.states["b"] = process.StateReady
+	eff.states["a"] = process.StateStopped
+	s.OnRequest(reqCh("a"))
+	if len(s.queued) != 1 {
+		t.Fatalf("queued=%d want 1", len(s.queued))
+	}
+	got := string(logger.GetHistory())
+	want := "[WARN] test: queuing model a (does not fit now; waiting for memory to free): needs 60 bytes, budget 100 (pool 110 - reserve 10), still resident after eviction: b=70"
+	if !strings.Contains(got, want) {
+		t.Errorf("log missing %q; got:\n%s", want, got)
 	}
 }
 
