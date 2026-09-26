@@ -1026,13 +1026,14 @@ func TestFIFO_Memory_EvictCreditAllowsSwap(t *testing.T) {
 
 func TestFIFO_Memory_ReserveReducesBudget(t *testing.T) {
 	// pool 100, reserve 30 → budget 70. a(60) fits alone, but with small(20)
-	// resident and not evicted, 60+20=80 > 70 → a queues (not never-fits).
+	// resident and not evicted, 60+20=80 > 70 → a does not fit (not never-fits).
+	// small is Stopping so something is pending and a queues rather than 503s.
 	models := map[string]config.ModelConfig{
 		"a":     {MemoryCeiling: 60},
 		"small": {MemoryCeiling: 20},
 	}
 	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 30)
-	eff.states["small"] = process.StateReady
+	eff.states["small"] = process.StateStopping
 	eff.states["a"] = process.StateStopped
 	s.OnRequest(reqCh("a"))
 	if eff.startsFor("a") != 0 || len(s.queued) != 1 {
@@ -1145,8 +1146,8 @@ func TestFIFO_Memory_TransientOverQueuesThenDrains(t *testing.T) {
 		"b": {MemoryCeiling: 60},
 	}
 	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
-	eff.states["b"] = process.StateReady   // resident
-	eff.states["a"] = process.StateStopped // wanted
+	eff.states["b"] = process.StateStopping // resident, being stopped (pending)
+	eff.states["a"] = process.StateStopped  // wanted
 	r := reqCh("a")
 	s.OnRequest(r)
 	assertAdmitted(t, r)
@@ -1162,8 +1163,8 @@ func TestFIFO_Memory_TransientOverQueuesThenDrains(t *testing.T) {
 
 func TestFIFO_Memory_QueuedLoadLogsWarning(t *testing.T) {
 	// A memory-queued load must leave a visible trace naming what it needs and
-	// what is holding the budget, or a request stuck behind a non-evictable
-	// resident waits silently.
+	// what is holding the budget, or a request waiting on a slow stop waits
+	// silently.
 	models := map[string]config.ModelConfig{
 		"a": {MemoryCeiling: 60},
 		"b": {MemoryCeiling: 70},
@@ -1171,7 +1172,7 @@ func TestFIFO_Memory_QueuedLoadLogsWarning(t *testing.T) {
 	logger := logmon.NewWriter(io.Discard)
 	eff := newFakeEffects()
 	s := NewFIFO("test", logger, &stubPlanner{}, config.FifoConfig{}, models, 110, 10, eff)
-	eff.states["b"] = process.StateReady
+	eff.states["b"] = process.StateStopping
 	eff.states["a"] = process.StateStopped
 	s.OnRequest(reqCh("a"))
 	if len(s.queued) != 1 {
@@ -1222,5 +1223,119 @@ func TestFIFO_Memory_DrainDropsNeverFitsAndReleases(t *testing.T) {
 	}
 	if len(s.reserved) != 0 {
 		t.Fatalf("reserved=%v want empty (slot must be released)", s.reserved)
+	}
+}
+
+// TestFIFO_Memory_BlockedWithNothingPendingRefusedAtAdmission is the P1 regression,
+// shaped like the live GB10 config: parakeet-asr (8) + qwen-asr (14) stay
+// resident (asr group, never evicted for an sglang load) beside one sglang model;
+// flash (100) evicts only the sglang model, and 100+22 > the 111 budget. Nothing
+// is in flight that could ever free the ASR pair, so queuing would wait forever
+// (and stream "Queue position" to a streaming caller forever). It must be refused
+// on the admission channel, naming the models that hold the budget.
+func TestFIFO_Memory_BlockedWithNothingPendingRefusedAtAdmission(t *testing.T) {
+	models := map[string]config.ModelConfig{
+		"parakeet-asr": {MemoryCeiling: 8},
+		"qwen-asr":     {MemoryCeiling: 14},
+		"qwen38-27b":   {MemoryCeiling: 83},
+		"flash-vllm":   {MemoryCeiling: 100},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{evict: map[string][]string{"flash-vllm": {"qwen38-27b"}}}, models, 121, 10)
+	eff.states["parakeet-asr"] = process.StateReady
+	eff.states["qwen-asr"] = process.StateReady
+	eff.states["qwen38-27b"] = process.StateReady
+	eff.states["flash-vllm"] = process.StateStopped
+
+	r := reqCh("flash-vllm")
+	s.OnRequest(r)
+	err := admitErr(t, r)
+	var memErr swaputil.MemoryAdmissionError
+	if !errors.As(err, &memErr) {
+		t.Fatalf("admission err=%v want MemoryAdmissionError", err)
+	}
+	for _, want := range []string{`"flash-vllm" needs 100 bytes`, "budget of 111", "parakeet-asr=8", "qwen-asr=14"} {
+		if !strings.Contains(memErr.Message, want) {
+			t.Errorf("refusal message %q missing %q", memErr.Message, want)
+		}
+	}
+	if strings.Contains(memErr.Message, "qwen38-27b") {
+		t.Errorf("refusal message %q names the model being evicted as a holder", memErr.Message)
+	}
+	if eff.startsFor("flash-vllm") != 0 || len(s.queued) != 0 || len(s.reserved) != 0 {
+		t.Fatalf("starts=%d queued=%d reserved=%v want 0/0/empty", eff.startsFor("flash-vllm"), len(s.queued), s.reserved)
+	}
+}
+
+// TestFIFO_Memory_QueuesBehindEvictingSwapThenServed: a request that does not
+// fit only because an in-flight swap is still evicting must queue (not 503) and
+// start once that swap lands. a (60) is being evicted by b's swap (b 30); c (40)
+// is in a group that evicts nothing, and a+b+c = 130 > 100 while a is counted.
+func TestFIFO_Memory_QueuesBehindEvictingSwapThenServed(t *testing.T) {
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"b": {MemoryCeiling: 30},
+		"c": {MemoryCeiling: 40},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{evict: map[string][]string{"b": {"a"}}}, models, 100, 0)
+	eff.states["a"] = process.StateReady
+	eff.states["b"] = process.StateStopped
+	eff.states["c"] = process.StateStopped
+
+	s.OnRequest(reqCh("b"))
+	if eff.startsFor("b") != 1 {
+		t.Fatalf("startsFor(b)=%d want 1", eff.startsFor("b"))
+	}
+	eff.states["a"] = process.StateStopping // b's swap is stopping a
+
+	c := reqCh("c")
+	s.OnRequest(c)
+	assertAdmitted(t, c)
+	if eff.startsFor("c") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(c)=%d queued=%d want 0/1 (must wait for b's eviction)", eff.startsFor("c"), len(s.queued))
+	}
+
+	eff.states["a"] = process.StateStopped
+	eff.states["b"] = process.StateReady
+	s.OnSwapDone(SwapDone{ModelID: "b"})
+	if eff.startsFor("c") != 1 || len(s.queued) != 0 {
+		t.Fatalf("startsFor(c)=%d queued=%d want 1/0 after the eviction landed (30+40 fits)", eff.startsFor("c"), len(s.queued))
+	}
+	if eff.errored("c") != 0 {
+		t.Fatalf("errored(c)=%d want 0", eff.errored("c"))
+	}
+}
+
+// TestFIFO_Memory_DrainRefusesWhenNothingPending: a request queued while
+// something was pending is refused (not re-queued forever) once that settles
+// and it still does not fit. It was already admitted, so the refusal goes
+// through GrantError and its reservation is released.
+func TestFIFO_Memory_DrainRefusesWhenNothingPending(t *testing.T) {
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"b": {MemoryCeiling: 30},
+		"c": {MemoryCeiling: 80},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{evict: map[string][]string{"b": {"a"}}}, models, 100, 0)
+	eff.states["a"] = process.StateReady
+	eff.states["b"] = process.StateStopped
+	eff.states["c"] = process.StateStopped
+
+	s.OnRequest(reqCh("b"))
+	c := reqCh("c")
+	s.OnRequest(c)
+	assertAdmitted(t, c)
+	if len(s.queued) != 1 {
+		t.Fatalf("queued=%d want 1 (b's swap is pending)", len(s.queued))
+	}
+
+	eff.states["a"] = process.StateStopped
+	eff.states["b"] = process.StateReady
+	s.OnSwapDone(SwapDone{ModelID: "b"}) // 30 + 80 = 110 > 100, nothing pending
+	assertMemoryRefused(t, eff, "c")
+	if len(s.queued) != 0 || s.reserved["c"] != 0 {
+		t.Fatalf("queued=%d reserved=%v want 0 and no slot held for c", len(s.queued), s.reserved)
+	}
+	if eff.startsFor("c") != 0 {
+		t.Fatalf("startsFor(c)=%d want 0", eff.startsFor("c"))
 	}
 }

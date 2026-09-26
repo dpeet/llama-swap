@@ -102,10 +102,11 @@ func NewFIFO(name string, logger *logmon.Monitor, planner Swapper, cfg config.Fi
 // siblings, waiting for ready) is deferred to a swap goroutine and reported back
 // via OnSwapDone.
 //
-// Two refusals are answered on the ADMISSION channel rather than after
-// admission: an unknown model, and a new load the memory budget can never fit
-// (step (1.5) in the body). That seam is before the caller can start a loading
-// stream, which is what keeps them clean status codes.
+// Three refusals are answered on the ADMISSION channel rather than after
+// admission: an unknown model, a new load the memory budget can never fit, and
+// a new load that does not fit now while nothing in progress could free memory
+// for it (step (1.5) in the body). That seam is before the caller can start a
+// loading stream, which is what keeps them clean status codes.
 //
 // The decision tree, in order:
 //
@@ -145,19 +146,33 @@ func (s *FIFO) OnRequest(req HandlerReq) {
 		fastPath = state == process.StateReady && len(evict) == 0 && !collidesWith(req.Model, evict, s.active)
 	}
 
-	// (1.5) Hard memory refusal, decided BEFORE admission succeeds. The model's
-	// own ceiling exceeds the budget (or is unknown), so no eviction and no
-	// waiting can ever help — this is a 503 the scheduler can answer at once.
-	// Answering it on the admission channel is what keeps it a clean 503: past
-	// admit(), a streaming caller has already been handed 200 + SSE headers by
-	// the loading writer, and the refusal can then only be framed into the
-	// stream (#1029's failure-reported-as-success shape). This is the same
-	// pre-stream seam the concurrency-limit rejection uses. neverFits implies
-	// !fits, so the gate after admission only has the transient case left.
-	if !joining && !fastPath && !isAdopt(req) && s.neverFits(req.Model) {
-		s.logger.Debugf("%s: refusing model %s (never fits memory budget)", s.name, req.Model)
-		s.rejectAdmission(req, swaputil.MemoryAdmissionError{Message: s.memoryRejectMessage(req.Model)})
-		return
+	// (1.5) Memory refusals, decided BEFORE admission succeeds. Answering on the
+	// admission channel is what keeps them a clean 503: past admit(), a
+	// streaming caller has already been handed 200 + SSE headers by the loading
+	// writer, and the refusal can then only be framed into the stream (#1029's
+	// failure-reported-as-success shape). This is the same pre-stream seam the
+	// concurrency-limit rejection uses. Two cases refuse here:
+	//   - never fits: the model's own ceiling exceeds the budget (or is
+	//     unknown), so no eviction and no waiting can ever help.
+	//   - does not fit now and nothing is pending (memoryPending): the models
+	//     holding the budget are ones the planner will not evict, and nothing
+	//     in motion could free memory, so queuing would wait forever (no event
+	//     would ever drain it).
+	// A load that does not fit but has something pending is admitted and
+	// queued below, waiting for that to settle.
+	memFits := joining || fastPath || isAdopt(req) || s.fits(req.Model, evict, running)
+	if !memFits {
+		if s.neverFits(req.Model) {
+			s.logger.Debugf("%s: refusing model %s (never fits memory budget)", s.name, req.Model)
+			s.rejectAdmission(req, swaputil.MemoryAdmissionError{Message: s.memoryRejectMessage(req.Model)})
+			return
+		}
+		if !s.memoryPending() {
+			msg := s.memoryBlockedMessage(req.Model, evict, running)
+			s.logger.Warnf("%s: refusing model %s: %s", s.name, req.Model, msg)
+			s.rejectAdmission(req, swaputil.MemoryAdmissionError{Message: msg})
+			return
+		}
 	}
 
 	if !s.admit(req) {
@@ -179,9 +194,9 @@ func (s *FIFO) OnRequest(req HandlerReq) {
 	}
 
 	// Memory admission: a NEW load must fit the pool once the evict set frees.
-	// Only the transient case reaches here (the never-fits half was answered
-	// before admission), so it waits for memory to free rather than refusing.
-	if !isAdopt(req) && !s.fits(req.Model, evict, running) {
+	// Only the pending case reaches here (both refusals were answered before
+	// admission), so it waits for the in-progress work to free memory.
+	if !memFits {
 		// Warn, not Debug, because a load that can't fit beside residents the
 		// planner won't evict otherwise waits with no visible trace.
 		s.logger.Warnf("%s: queuing model %s (does not fit now; waiting for memory to free): needs %d bytes, budget %d (pool %d - reserve %d), still resident after eviction: %s",
@@ -480,7 +495,7 @@ func (s *FIFO) fits(target string, evict, running []string) bool {
 
 // memoryHolders lists the models fits charges against the budget besides target
 // (running minus evict and target itself) with their ceilings in bytes, for the
-// memory-queue log line.
+// memory-queue log line and the memory-refusal message.
 func (s *FIFO) memoryHolders(target string, evict, running []string) string {
 	var holders []string
 	for _, id := range running {
@@ -493,6 +508,33 @@ func (s *FIFO) memoryHolders(target string, evict, running []string) string {
 		return "none"
 	}
 	return strings.Join(holders, ", ")
+}
+
+// memoryPending reports whether anything already in motion could still free
+// memory for a load that does not fit now: an in-flight swap (its evictions are
+// underway, and a failed start releases its target's share), or a model in
+// StateStopping (a stop that has not finished). Only then is it worth queuing an
+// over-budget load, because each ends in an event that runs drainQueue again.
+// The rule is deliberately coarse (it does not ask whether the pending work
+// would free enough): drainQueue re-checks and refuses once nothing is pending,
+// so the cost of a false "pending" is a bounded wait, not a stranded request.
+func (s *FIFO) memoryPending() bool {
+	if len(s.active) > 0 {
+		return true
+	}
+	for _, st := range s.effects.RunningModels() {
+		if st == process.StateStopping {
+			return true
+		}
+	}
+	return false
+}
+
+// memoryBlockedMessage builds the client-facing 503 message for a load that
+// does not fit now and has nothing pending that could free memory for it.
+func (s *FIFO) memoryBlockedMessage(target string, evict, running []string) string {
+	return fmt.Sprintf("model %q needs %d bytes but the budget of %d (pool %d - reserve %d) is held by models that will not be evicted for it: %s",
+		target, s.ceilings[target], s.pool-s.reserve, s.pool, s.reserve, s.memoryHolders(target, evict, running))
 }
 
 // isAdopt reports whether req is an adoption attach (StartAdopt sets the "adopt"
@@ -592,15 +634,27 @@ func (s *FIFO) drainQueue() {
 			continue
 		}
 		// Memory admission for a queued load: a never-fits request is dropped
-		// with an error (grantError releases its reservation); a transient
-		// over-budget stays queued for the next drainQueue (see its doc for
-		// which events trigger one).
+		// with an error (grantError releases its reservation). An over-budget
+		// one stays queued only while something is still pending that could
+		// free memory (memoryPending, the same rule OnRequest applies);
+		// otherwise it is refused now, because no later event would drain it.
+		// This request was already admitted, so the refusal goes through
+		// grantError like any other post-admission failure: a non-streaming
+		// caller gets the 503 as-is, and a streaming caller whose loading
+		// stream already committed its 200 gets it framed as an SSE error
+		// event + [DONE] (ServeHTTP's finishLoading), because that is the only
+		// channel left to reach it.
 		if !isAdopt(req) && !s.fits(req.Model, evict, running) {
-			if s.neverFits(req.Model) {
+			switch {
+			case s.neverFits(req.Model):
 				s.logger.Debugf("%s: dropping queued model %s (never fits memory budget)", s.name, req.Model)
 				s.grantError(req, swaputil.MemoryAdmissionError{Message: s.memoryRejectMessage(req.Model)})
-			} else {
+			case s.memoryPending():
 				remaining = append(remaining, req)
+			default:
+				msg := s.memoryBlockedMessage(req.Model, evict, running)
+				s.logger.Warnf("%s: dropping queued model %s: %s", s.name, req.Model, msg)
+				s.grantError(req, swaputil.MemoryAdmissionError{Message: msg})
 			}
 			continue
 		}

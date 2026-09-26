@@ -186,7 +186,7 @@
             "type": "integer",
             "minimum": 0,
             "default": 0,
-            "description": "Usable memory budget in bytes for memory admission. A new model load is admitted only when the memoryCeiling of every resident model plus the new model's memoryCeiling fits within memoryPool minus memoryReserve; otherwise it waits for memory to free, or is refused with HTTP 503 if it can never fit or has no memoryCeiling. Not auto-detected. 0 disables memory admission."
+            "description": "Usable memory budget in bytes for memory admission. A new model load is admitted only when the memoryCeiling of every resident model plus the new model's memoryCeiling fits within memoryPool minus memoryReserve; otherwise it waits while a swap or stop in progress may free memory, and is refused with HTTP 503 when nothing pending can make it fit, when it can never fit, or when it has no memoryCeiling. Not auto-detected. 0 disables memory admission."
         },
         "memoryReserve": {
             "type": "integer",

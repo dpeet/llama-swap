@@ -1,10 +1,10 @@
 ---
 title: Routing capacity and request queues
-summary: Configure concurrencyLimit and globalConcurrencyLimit, and understand queued work while a model is loading or busy.
+summary: Configure concurrencyLimit, globalConcurrencyLimit and memory admission, and understand queued work while a model is loading or busy.
 category: guides
-tags: [routing, queue, capacity, concurrency, concurrency-limit, max-concurrent-requests, global-concurrency-limit, rate-limit]
-config_keys: [routing, models.*.concurrencyLimit, globalConcurrencyLimit]
-updated: 2026-09-10
+tags: [routing, queue, capacity, concurrency, concurrency-limit, max-concurrent-requests, global-concurrency-limit, rate-limit, memory, memory-admission, unified-memory, oom]
+config_keys: [routing, models.*.concurrencyLimit, globalConcurrencyLimit, memoryPool, memoryReserve, models.*.memoryCeiling]
+updated: 2026-09-25
 ---
 
 # Routing capacity and request queues
@@ -42,3 +42,38 @@ Use this to protect shared hardware (CPU, disk, network) from being
 overwhelmed by traffic spread across many different models, which a per-model
 `concurrencyLimit` cannot do since it only counts requests to one model at a
 time.
+
+## Memory admission
+
+On a box where models share one memory pool (e.g. unified GPU/CPU memory), you
+can have llama-swap refuse loads that would not fit instead of letting the
+kernel OOM-kill something. All values are bytes; `memoryPool: 0` (the default)
+turns the feature off.
+
+```yaml
+memoryPool: 129922760704      # 121 GiB usable
+memoryReserve: 10737418240    # keep 10 GiB free -> budget is pool - reserve
+models:
+  big-llm:
+    memoryCeiling: 107374182400  # measured steady-state footprint
+  asr:
+    memoryCeiling: 8589934592
+```
+
+A new load is admitted only when its `memoryCeiling` plus the ceilings of every
+model that stays resident (running models minus the ones the swap will evict)
+fits the budget. If it does not:
+
+- It is refused at once with HTTP 503 (`code: memory_admission`) when its own
+  ceiling exceeds the budget, when it has no `memoryCeiling`, or when the
+  models holding the budget are ones the router will not evict for it and
+  nothing in progress (a swap, a model stopping) could free memory. The message
+  names the models holding the budget. Unload one of them, or change groups so
+  the load evicts it.
+- It queues only while such work is in progress, and is served or refused with
+  the same 503 once that settles. A streaming client already receiving the
+  loading stream gets the refusal as an SSE error event followed by
+  `data: [DONE]`.
+
+Already-running models and adopt attaches are never refused. Measure ceilings
+under real load: an under-sized ceiling lets two models in that do not fit.
