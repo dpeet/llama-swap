@@ -1099,3 +1099,130 @@ func TestBaseRouter_MemoryDrainRefusalFramedIntoLoadingStream(t *testing.T) {
 		t.Errorf("c.runCalls=%d want 0", got)
 	}
 }
+
+// TestBaseRouter_RetryAfterForcedKillWaitsForLeak is the router-level P2
+// regression. b's swap force-kills its evictee a: a real process then reads
+// Stopped (the fake's forcedKill mode), while a's upstream is still answering.
+// The first request fails (the todo 1.6 guard); the retry used to credit a as
+// freed and load b on top. It must now wait until a's upstream stops answering
+// on its proxy URL, then be served.
+func TestBaseRouter_RetryAfterForcedKillWaitsForLeak(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError) // still up, even if unhealthy
+	}))
+	defer upstream.Close()
+
+	conf := memGateConfig(100)
+	ma := conf.Models["a"]
+	ma.Proxy = upstream.URL
+	ma.CheckEndpoint = "/health"
+	conf.Models["a"] = ma
+
+	a := newFakeProcess("a")
+	a.markReady()
+	a.forcedKill = true
+	pb := newFakeProcess("b")
+	pb.autoReady = true
+	b := newTestBaseWithConfig(t, conf, map[string]process.Process{"a": a, "b": pb}, &stubPlanner{
+		evict: map[string][]string{"b": {"a"}},
+	})
+	b.leakProbeInterval = 10 * time.Millisecond
+
+	w1 := httptest.NewRecorder()
+	b.ServeHTTP(w1, newRequest("b"))
+	if w1.Code == http.StatusOK || !strings.Contains(w1.Body.String(), "eviction did not complete") {
+		t.Fatalf("first request status=%d body=%q, want the failed-eviction error", w1.Code, w1.Body.String())
+	}
+	if got := a.State(); got != process.StateStopped {
+		t.Fatalf("a state=%q want stopped (the real process's forced-kill end state)", got)
+	}
+
+	w2 := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		b.ServeHTTP(w2, newRequest("b"))
+		close(done)
+	}()
+	select {
+	case <-done:
+		t.Fatalf("retry finished while a's upstream still answers: status=%d body=%q", w2.Code, w2.Body.String())
+	case <-time.After(200 * time.Millisecond): // many probe intervals
+	}
+	if got := pb.runCalls.Load(); got != 0 {
+		t.Fatalf("b.runCalls=%d want 0 while a's leak is live", got)
+	}
+
+	upstream.Close() // a's container finally goes away
+	waitSignal(t, done, "retry after the leak cleared")
+	if w2.Code != http.StatusOK {
+		t.Fatalf("retry status=%d want 200 body=%q", w2.Code, w2.Body.String())
+	}
+	if got := pb.serveCalls.Load(); got != 1 {
+		t.Errorf("b.serveCalls=%d want 1", got)
+	}
+}
+
+// TestBaseRouter_UpstreamGone pins the leak probe's clear condition: only a
+// connection-level failure means the upstream is gone. Any HTTP answer, even a
+// 5xx, means a server is still up (and so may still hold memory), and a timeout
+// cannot tell gone from hung.
+func TestBaseRouter_UpstreamGone(t *testing.T) {
+	client := &http.Client{Timeout: 100 * time.Millisecond, Transport: &http.Transport{DisableKeepAlives: true}}
+	ctx := context.Background()
+
+	errSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer errSrv.Close()
+	if upstreamGone(ctx, client, errSrv.URL+"/health") {
+		t.Error("5xx answer treated as gone")
+	}
+
+	release := make(chan struct{})
+	slowSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		<-release
+	}))
+	defer slowSrv.Close()
+	defer close(release)
+	if upstreamGone(ctx, client, slowSrv.URL+"/health") {
+		t.Error("timed-out probe treated as gone")
+	}
+
+	closed := httptest.NewServer(http.NotFoundHandler())
+	url := closed.URL + "/health"
+	closed.Close()
+	if !upstreamGone(ctx, client, url) {
+		t.Error("refused connection not treated as gone")
+	}
+}
+
+func TestBaseRouter_LeakProbeURL(t *testing.T) {
+	for _, tc := range []struct {
+		mc   config.ModelConfig
+		want string
+	}{
+		{config.ModelConfig{Proxy: "http://127.0.0.1:8990", CheckEndpoint: "/health"}, "http://127.0.0.1:8990/health"},
+		{config.ModelConfig{Proxy: "http://127.0.0.1:8990/", CheckEndpoint: "none"}, "http://127.0.0.1:8990/"},
+		{config.ModelConfig{Proxy: "http://127.0.0.1:8990"}, "http://127.0.0.1:8990/"},
+		{config.ModelConfig{}, ""},
+	} {
+		if got := leakProbeURL(tc.mc); got != tc.want {
+			t.Errorf("leakProbeURL(%+v)=%q want %q", tc.mc, got, tc.want)
+		}
+	}
+}
+
+// TestBaseRouter_StopProcessesReportsForcedKills: Unload's stop path reports
+// which stops were forced so the scheduler can keep charging them.
+func TestBaseRouter_StopProcessesReportsForcedKills(t *testing.T) {
+	a := newFakeProcess("a")
+	a.markReady()
+	a.forcedKill = true
+	c := newFakeProcess("c")
+	c.markReady()
+	b := newTestBase(t, map[string]process.Process{"a": a, "c": c}, &stubPlanner{})
+	forced := b.StopProcesses(time.Second, []string{"a", "c", "unknown"})
+	if len(forced) != 1 || forced[0] != "a" {
+		t.Fatalf("forced=%v want [a]", forced)
+	}
+}

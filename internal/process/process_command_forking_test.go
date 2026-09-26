@@ -499,7 +499,9 @@ func TestProcessCommand_StopDuringStartupRunsCmdStop(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	if err := p.Stop(testStopTimeout); err != nil {
+	// This CmdStop (touch) does not end the sleep, so the teardown has to
+	// force-kill; Stop now reports that instead of the old silent nil.
+	if err := p.Stop(testStopTimeout); err != nil && !errors.Is(err, ErrForcedKill) {
 		t.Fatalf("Stop: %v", err)
 	}
 	// CmdStop must have run (marker present) within a brief settle window.
@@ -518,5 +520,98 @@ func TestProcessCommand_StopDuringStartupRunsCmdStop(t *testing.T) {
 	case <-runErr:
 	case <-time.After(testReturnTimeout):
 		t.Error("Run did not return after Stop")
+	}
+}
+
+// writeTermIgnoringScript writes a script that ignores SIGTERM (only SIGKILL
+// ends it) and returns its path plus a file it creates once the trap is
+// installed. It never listens, so a health check never passes and the process
+// stays in StateStarting.
+func writeTermIgnoringScript(t *testing.T) (script, ready string) {
+	t.Helper()
+	dir := t.TempDir()
+	script = filepath.Join(dir, "ignore-term.sh")
+	ready = filepath.Join(dir, "trap.ready")
+	body := fmt.Sprintf("#!/bin/bash\ntrap '' SIGTERM\necho ready > %q\nwhile true; do sleep 0.1; done\n", ready)
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return script, ready
+}
+
+func waitForFile(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never appeared", path)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestProcessCommand_StopDuringStartupSurfacesForcedKill covers doStart's
+// abort() path: a Stop that lands while the process is still health-checking
+// is torn down by abort(), which used to SIGKILL after a hardcoded 5s and throw
+// the result away, so a still-tearing-down container read as freed. It must use
+// the stop's own timeout and hand ErrForcedKill back to the Stop caller.
+func TestProcessCommand_StopDuringStartupSurfacesForcedKill(t *testing.T) {
+	script, ready := writeTermIgnoringScript(t)
+	p := newProcessCommand(t, config.ModelConfig{
+		Cmd:           script,
+		Proxy:         fmt.Sprintf("http://127.0.0.1:%d", getFreePort(t)),
+		CheckEndpoint: "/health",
+		UnloadTimeout: 30, // must NOT be used: the stop's own timeout wins
+	})
+	p.waitDelay = 200 * time.Millisecond
+
+	runErr := make(chan error, 1)
+	go func() { runErr <- p.Run(30 * time.Second) }()
+	waitForState(t, p, StateStarting)
+	waitForFile(t, ready)
+
+	start := time.Now()
+	err := p.Stop(300 * time.Millisecond)
+	if !errors.Is(err, ErrForcedKill) {
+		t.Fatalf("Stop err=%v want ErrForcedKill", err)
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Errorf("Stop took %v; abort() should honor the 300ms stop timeout, not a fixed 5s or unloadTimeout", elapsed)
+	}
+	if got := p.State(); got != StateStopped {
+		t.Errorf("after Stop: state=%s want %s", got, StateStopped)
+	}
+	select {
+	case <-runErr:
+	case <-time.After(testReturnTimeout):
+		t.Error("Run did not return after Stop")
+	}
+}
+
+// TestProcessCommand_StartFailureSurfacesForcedKill: an intrinsic start failure
+// (health check timeout) whose teardown had to force-kill reports that in the
+// start error, so the router can keep counting the target's memory.
+func TestProcessCommand_StartFailureSurfacesForcedKill(t *testing.T) {
+	script, _ := writeTermIgnoringScript(t)
+	p := newProcessCommand(t, config.ModelConfig{
+		Cmd:           script,
+		Proxy:         fmt.Sprintf("http://127.0.0.1:%d", getFreePort(t)),
+		CheckEndpoint: "/health",
+		UnloadTimeout: 1, // abort()'s graceful window for an intrinsic failure
+	})
+	p.waitDelay = 200 * time.Millisecond
+
+	err := p.EnsureReady(context.Background(), 1500*time.Millisecond)
+	if !errors.Is(err, ErrForcedKill) {
+		t.Fatalf("EnsureReady err=%v want it to wrap ErrForcedKill", err)
+	}
+	if !strings.Contains(err.Error(), "health check timed out") {
+		t.Errorf("EnsureReady err=%v lost the start failure", err)
+	}
+	if got := p.State(); got != StateStopped {
+		t.Errorf("state=%s want %s", got, StateStopped)
 	}
 }
