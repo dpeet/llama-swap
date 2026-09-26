@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mostlygeek/llama-swap/internal/config"
@@ -181,7 +182,10 @@ func (s *FIFO) OnRequest(req HandlerReq) {
 	// Only the transient case reaches here (the never-fits half was answered
 	// before admission), so it waits for memory to free rather than refusing.
 	if !isAdopt(req) && !s.fits(req.Model, evict, running) {
-		s.logger.Debugf("%s: queuing model %s (does not fit now; waiting for memory to free)", s.name, req.Model)
+		// Warn, not Debug, because a load that can't fit beside residents the
+		// planner won't evict otherwise waits with no visible trace.
+		s.logger.Warnf("%s: queuing model %s (does not fit now; waiting for memory to free): needs %d bytes, budget %d (pool %d - reserve %d), still resident after eviction: %s",
+			s.name, req.Model, s.ceilings[req.Model], s.pool-s.reserve, s.pool, s.reserve, s.memoryHolders(req.Model, evict, running))
 		s.enqueue(req)
 		return
 	}
@@ -470,6 +474,23 @@ func (s *FIFO) fits(target string, evict, running []string) bool {
 		}
 	}
 	return true
+}
+
+// memoryHolders lists the models fits charges against the budget besides target
+// (running minus evict and target itself) with their ceilings in bytes, for the
+// memory-queue log line.
+func (s *FIFO) memoryHolders(target string, evict, running []string) string {
+	var holders []string
+	for _, id := range running {
+		if id == target || containsString(evict, id) {
+			continue
+		}
+		holders = append(holders, fmt.Sprintf("%s=%d", id, s.ceilings[id]))
+	}
+	if len(holders) == 0 {
+		return "none"
+	}
+	return strings.Join(holders, ", ")
 }
 
 // isAdopt reports whether req is an adoption attach (StartAdopt sets the "adopt"
