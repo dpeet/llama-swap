@@ -1489,6 +1489,32 @@ func TestBaseRouter_RunningCheckTimeoutKeepsLeak(t *testing.T) {
 	waitSignal(t, done, "cancelled c request")
 }
 
+// TestBaseRouter_RunningCheckSignalDeathKeepsLeak: only a normal non-zero exit
+// means "gone". A check killed by a signal (ExitCode -1) never answered, so it
+// must count as still running, like a timeout.
+func TestBaseRouter_RunningCheckSignalDeathKeepsLeak(t *testing.T) {
+	skipWithoutShell(t)
+	logger := logmon.NewWriter(io.Discard)
+	check := func(cmd string) bool {
+		t.Helper()
+		args, err := config.SanitizeCommand(cmd)
+		if err != nil {
+			t.Fatalf("SanitizeCommand(%q): %v", cmd, err)
+		}
+		gone, _ := runningCheckGone(context.Background(), logger, "test", "a", args, os.Environ(), io.Discard, 5*time.Second)
+		return gone
+	}
+	if check(`sh -c 'kill -KILL $$'`) {
+		t.Error("runningCheck killed by SIGKILL treated as gone")
+	}
+	if check("sh -c 'exit 0'") {
+		t.Error("runningCheck exiting 0 treated as gone")
+	}
+	if !check("sh -c 'exit 1'") {
+		t.Error("runningCheck exiting 1 not treated as gone")
+	}
+}
+
 // TestBaseRouter_NeverHealthyLeakNeedsUnload: a force-killed while still
 // loading never answered its checkEndpoint, so its refused port proves
 // nothing and, without runningCheck, nothing watches it. c is refused at once
