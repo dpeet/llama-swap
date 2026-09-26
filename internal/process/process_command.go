@@ -163,6 +163,9 @@ type ProcessCommand struct {
 	// (nanoseconds) into doStart's abort() the same way; 0 means no stop asked,
 	// and abort() falls back to the model's unloadTimeout (see abortTimeout).
 	pendingStopTimeout atomic.Int64
+
+	// selfStop is the OnSelfStop callback; nil until one is registered.
+	selfStop atomic.Pointer[func(error)]
 }
 
 var _ Process = (*ProcessCommand)(nil)
@@ -297,6 +300,7 @@ func (p *ProcessCommand) run() {
 			p.handler.Store(nil)
 			setState(StateStopped)
 			p.proxyLogger.Warnf("<%s> upstream process exited unexpectedly", p.id)
+			p.reportSelfStop(nil)
 			// Safety net: readyWaiters is normally empty here because
 			// WaitReady is answered immediately while StateReady. Notifying
 			// anyway keeps the invariant that no transition into a settled
@@ -405,7 +409,7 @@ func (p *ProcessCommand) run() {
 								}
 								if time.Since(time.Unix(0, p.lastUse.Load())) > ttlDuration {
 									p.proxyLogger.Infof("<%s> Unloading model, TTL of %ds reached", p.id, p.config.UnloadAfter)
-									p.Stop(time.Duration(p.config.UnloadTimeout) * time.Second)
+									p.reportSelfStop(p.Stop(time.Duration(p.config.UnloadTimeout) * time.Second))
 									return
 								}
 							}
@@ -815,6 +819,18 @@ func (p *ProcessCommand) killProcess(cmd *exec.Cmd, cancel context.CancelFunc, c
 	<-cmdDone
 	p.proxyLogger.Warnf("[%s] graceful stop exceeded %v; process group force-killed (upstream may still hold its resources)", p.id, gracefulTimeout)
 	return ErrForcedKill
+}
+
+// OnSelfStop implements Process.
+func (p *ProcessCommand) OnSelfStop(fn func(err error)) {
+	p.selfStop.Store(&fn)
+}
+
+// reportSelfStop hands a stop nobody asked for to the OnSelfStop callback.
+func (p *ProcessCommand) reportSelfStop(err error) {
+	if fn := p.selfStop.Load(); fn != nil && *fn != nil {
+		(*fn)(err)
+	}
 }
 
 func (p *ProcessCommand) ID() string {

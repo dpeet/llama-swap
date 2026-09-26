@@ -1308,3 +1308,88 @@ func TestBaseRouter_UnloadDuringEvictionDoesNotStartTarget(t *testing.T) {
 		t.Fatalf("later request status=%d runCalls=%d body=%q want 200/1", w2.Code, pb.runCalls.Load(), w2.Body.String())
 	}
 }
+
+// selfStopConfig: a (60) and c (60) cannot both fit a 100 pool, and the planner
+// does not evict a for c, so c can only load once a has gone on its own.
+func selfStopConfig(aProxy string) config.Config {
+	return config.Config{
+		HealthCheckTimeout: 5,
+		MemoryPool:         100,
+		Models: map[string]config.ModelConfig{
+			"a": {MemoryCeiling: 60, Proxy: aProxy, CheckEndpoint: "/health"},
+			"c": {MemoryCeiling: 60},
+		},
+	}
+}
+
+// TestBaseRouter_TTLStopDrainsQueuedLoad: c queued while a was in its TTL
+// unload (StateStopping counts as pending). The TTL stop is not the router's,
+// so it used to finish without any event and c was stranded until something
+// unrelated drained the queue. The process's self-stop report now drains it.
+func TestBaseRouter_TTLStopDrainsQueuedLoad(t *testing.T) {
+	a := newFakeProcess("a")
+	a.setState(process.StateStopping) // TTL unload in progress
+	pc := newFakeProcess("c")
+	pc.autoReady = true
+	b := newTestBaseWithConfig(t, selfStopConfig(""), map[string]process.Process{"a": a, "c": pc}, &stubPlanner{})
+
+	w := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		b.ServeHTTP(w, newRequest("c"))
+		close(done)
+	}()
+	waitProcessed(t, b.testProcessed, 1)
+	if got := pc.runCalls.Load(); got != 0 {
+		t.Fatalf("c.runCalls=%d want 0 while a is stopping", got)
+	}
+
+	a.selfStop(nil) // the TTL stop finished
+	waitSignal(t, done, "c request after a's TTL stop")
+	if w.Code != http.StatusOK || pc.serveCalls.Load() != 1 {
+		t.Fatalf("c status=%d serveCalls=%d body=%q want 200/1", w.Code, pc.serveCalls.Load(), w.Body.String())
+	}
+}
+
+// TestBaseRouter_TTLForcedKillRecordsLeak: a TTL stop that had to force-kill
+// used to be credited like a clean stop, loading c on top of a container that
+// may still hold a's memory. It is now a leak: c waits until a's upstream stops
+// answering, then loads.
+func TestBaseRouter_TTLForcedKillRecordsLeak(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	a := newFakeProcess("a")
+	a.setState(process.StateStopping)
+	pc := newFakeProcess("c")
+	pc.autoReady = true
+	b := newTestBaseWithConfig(t, selfStopConfig(upstream.URL), map[string]process.Process{"a": a, "c": pc}, &stubPlanner{})
+	b.leakProbeInterval = 10 * time.Millisecond
+
+	w := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		b.ServeHTTP(w, newRequest("c"))
+		close(done)
+	}()
+	waitProcessed(t, b.testProcessed, 1)
+
+	a.selfStop(process.ErrForcedKill)
+	waitProcessed(t, b.testProcessed, 1) // the self-stop report
+	select {
+	case <-done:
+		t.Fatalf("c finished while a's force-killed upstream still answers: status=%d body=%q", w.Code, w.Body.String())
+	case <-time.After(200 * time.Millisecond): // many probe intervals
+	}
+	if got := pc.runCalls.Load(); got != 0 {
+		t.Fatalf("c.runCalls=%d want 0 while a's leak is live", got)
+	}
+
+	upstream.Close()
+	waitSignal(t, done, "c request after a's leak cleared")
+	if w.Code != http.StatusOK {
+		t.Fatalf("c status=%d want 200 body=%q", w.Code, w.Body.String())
+	}
+}
