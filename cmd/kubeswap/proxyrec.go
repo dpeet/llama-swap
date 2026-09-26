@@ -10,8 +10,12 @@ type statusRecorder struct {
 }
 
 // WriteHeader Records that the response has started, then forwards the status code.
+// An interim 1xx (other than 101) does not start the response; the check
+// mirrors internal/swaputil.IsInformational, which explains why.
 func (r *statusRecorder) WriteHeader(code int) {
-	r.wrote = true
+	if code < 100 || code > 199 || code == http.StatusSwitchingProtocols {
+		r.wrote = true
+	}
 	r.ResponseWriter.WriteHeader(code)
 }
 

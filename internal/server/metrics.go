@@ -645,6 +645,11 @@ func (w *responseBodyCopier) WriteHeader(statusCode int) {
 	if w.wroteHeader {
 		return
 	}
+	// A 1xx is interim, not the final status: see swaputil.IsInformational.
+	if swaputil.IsInformational(statusCode) {
+		w.ResponseWriter.WriteHeader(statusCode)
+		return
+	}
 	w.wroteHeader = true
 	w.status = statusCode
 	w.ResponseWriter.WriteHeader(statusCode)
