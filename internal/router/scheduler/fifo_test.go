@@ -63,12 +63,20 @@ type fakeEffects struct {
 	starts []startRec
 	grants []grantRec
 	stops  []stopRec
+
+	// forced marks models whose StopProcesses stop "force-killed": they are
+	// reported back as forced (and left Stopped, like a real process).
+	forced map[string]bool
+	// watching is the set of models with a live leak watch.
+	watching map[string]bool
 }
 
 func newFakeEffects() *fakeEffects {
 	return &fakeEffects{
 		states:      map[string]process.ProcessState{},
 		serveResult: map[string]bool{},
+		forced:      map[string]bool{},
+		watching:    map[string]bool{},
 	}
 }
 
@@ -106,9 +114,22 @@ func (f *fakeEffects) GrantServe(req HandlerReq, modelID string) bool {
 	return ok
 }
 
-func (f *fakeEffects) StopProcesses(timeout time.Duration, ids []string) {
+func (f *fakeEffects) StopProcesses(timeout time.Duration, ids []string) []string {
 	f.stops = append(f.stops, stopRec{timeout: timeout, ids: ids})
+	var forced []string
+	for _, id := range ids {
+		if _, ok := f.states[id]; ok {
+			f.states[id] = process.StateStopped
+		}
+		if f.forced[id] {
+			forced = append(forced, id)
+		}
+	}
+	return forced
 }
+
+func (f *fakeEffects) WatchLeak(modelID string)   { f.watching[modelID] = true }
+func (f *fakeEffects) UnwatchLeak(modelID string) { delete(f.watching, modelID) }
 
 // served counts grants that handed modelID a handler and were received.
 func (f *fakeEffects) served(modelID string) int {
@@ -1337,5 +1358,140 @@ func TestFIFO_Memory_DrainRefusesWhenNothingPending(t *testing.T) {
 	}
 	if eff.startsFor("c") != 0 {
 		t.Fatalf("startsFor(c)=%d want 0", eff.startsFor("c"))
+	}
+}
+
+// ── Leaked (force-killed) models ────────────────────────────────────────────
+
+// TestFIFO_Memory_ForcedKillEvicteeChargedUntilGone is the P2 regression at the
+// scheduler level. b's swap force-killed its evictee a: the process reads
+// Stopped, but its container may still hold 60. A retry of b used to see a as
+// gone, credit it and load on top. It must now queue (the leak is pending),
+// and start only once the leak watcher reports a's upstream gone.
+func TestFIFO_Memory_ForcedKillEvicteeChargedUntilGone(t *testing.T) {
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"b": {MemoryCeiling: 60},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{evict: map[string][]string{"b": {"a"}}}, models, 100, 0)
+	eff.states["a"] = process.StateReady
+	eff.states["b"] = process.StateStopped
+
+	s.OnRequest(reqCh("b"))
+	eff.states["a"] = process.StateStopped // forced kill: a real process ends Stopped
+	s.OnSwapDone(SwapDone{ModelID: "b", Err: errors.New("eviction did not complete"), Leaked: []string{"a"}})
+	if _, ok := s.leaked["a"]; !ok || !eff.watching["a"] {
+		t.Fatalf("leaked=%v watching=%v want a leaked and watched", s.leaked, eff.watching)
+	}
+
+	retry := reqCh("b")
+	s.OnRequest(retry)
+	assertAdmitted(t, retry)
+	if eff.startsFor("b") != 1 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(b)=%d queued=%d want 1/1 (retry must wait for the leak, not load on top)", eff.startsFor("b"), len(s.queued))
+	}
+
+	s.OnLeakGone("a")
+	if _, ok := s.leaked["a"]; ok || eff.watching["a"] {
+		t.Fatalf("leaked=%v watching=%v want a cleared", s.leaked, eff.watching)
+	}
+	if eff.startsFor("b") != 2 || len(s.queued) != 0 {
+		t.Fatalf("startsFor(b)=%d queued=%d want 2/0 once a's upstream is gone", eff.startsFor("b"), len(s.queued))
+	}
+}
+
+// TestFIFO_Memory_InFlightEvicteeChargedUntilSwapDone closes the window between
+// an evictee's Stop returning (process reads Stopped) and its SwapDone saying
+// whether that stop was forced: a load decided in that window must still count
+// the evictee.
+func TestFIFO_Memory_InFlightEvicteeChargedUntilSwapDone(t *testing.T) {
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"b": {MemoryCeiling: 30},
+		"c": {MemoryCeiling: 40},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{evict: map[string][]string{"b": {"a"}}}, models, 90, 0) // 90: c never fits beside a (60+40)
+	eff.states["a"] = process.StateReady
+	eff.states["b"] = process.StateStopped
+	eff.states["c"] = process.StateStopped
+
+	s.OnRequest(reqCh("b"))
+	eff.states["a"] = process.StateStopped // a's Stop returned; SwapDone not yet seen
+
+	s.OnRequest(reqCh("c"))
+	if eff.startsFor("c") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(c)=%d queued=%d want 0/1 (a still counts until b's swap reports)", eff.startsFor("c"), len(s.queued))
+	}
+
+	s.OnSwapDone(SwapDone{ModelID: "b", Err: errors.New("eviction did not complete"), Leaked: []string{"a"}})
+	if eff.startsFor("c") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(c)=%d queued=%d want 0/1 (a leaked: keep waiting)", eff.startsFor("c"), len(s.queued))
+	}
+	s.OnLeakGone("a")
+	if eff.startsFor("c") != 1 {
+		t.Fatalf("startsFor(c)=%d want 1 after a's leak cleared", eff.startsFor("c"))
+	}
+}
+
+// TestFIFO_Memory_UnloadForcedKillRecordsLeak: an unload whose stop force-killed
+// keeps charging the model, and a load that only fails to fit because of it
+// queues (the leak is pending) instead of being refused.
+func TestFIFO_Memory_UnloadForcedKillRecordsLeak(t *testing.T) {
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"c": {MemoryCeiling: 60},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateReady
+	eff.states["c"] = process.StateStopped
+	eff.forced["a"] = true
+
+	s.OnUnload([]string{"a"}, time.Second)
+	if _, ok := s.leaked["a"]; !ok || !eff.watching["a"] {
+		t.Fatalf("leaked=%v watching=%v want a leaked and watched", s.leaked, eff.watching)
+	}
+
+	r := reqCh("c")
+	s.OnRequest(r)
+	assertAdmitted(t, r)
+	if eff.startsFor("c") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(c)=%d queued=%d want 0/1", eff.startsFor("c"), len(s.queued))
+	}
+	s.OnLeakGone("a")
+	if eff.startsFor("c") != 1 {
+		t.Fatalf("startsFor(c)=%d want 1 after the leak cleared", eff.startsFor("c"))
+	}
+}
+
+// TestFIFO_Memory_LeakClearedWhenModelStartsAgain: once a leaked model is
+// started (or adopted) successfully it is counted through the running set, so
+// the leak entry and its watch go away.
+func TestFIFO_Memory_LeakClearedWhenModelStartsAgain(t *testing.T) {
+	models := map[string]config.ModelConfig{"a": {MemoryCeiling: 60}}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateReady
+	eff.forced["a"] = true
+	s.OnUnload([]string{"a"}, time.Second)
+
+	s.OnRequest(adoptReq("a"))
+	if eff.startsFor("a") != 1 {
+		t.Fatalf("startsFor(a)=%d want 1 (the leaked model itself is not blocked by its own leak)", eff.startsFor("a"))
+	}
+	eff.states["a"] = process.StateReady
+	s.OnSwapDone(SwapDone{ModelID: "a"})
+	if _, ok := s.leaked["a"]; ok || eff.watching["a"] {
+		t.Fatalf("leaked=%v watching=%v want cleared after a successful start", s.leaked, eff.watching)
+	}
+}
+
+// TestFIFO_Memory_LeaksIgnoredWithGateOff: with memoryPool 0 nothing is
+// charged, so a forced kill records nothing and starts no watcher.
+func TestFIFO_Memory_LeaksIgnoredWithGateOff(t *testing.T) {
+	s, eff := newFIFOMem(t, &stubPlanner{}, map[string]config.ModelConfig{"a": {}}, 0, 0)
+	eff.states["a"] = process.StateReady
+	eff.forced["a"] = true
+	s.OnUnload([]string{"a"}, time.Second)
+	if len(s.leaked) != 0 || len(eff.watching) != 0 {
+		t.Fatalf("leaked=%v watching=%v want none with the gate off", s.leaked, eff.watching)
 	}
 }

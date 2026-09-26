@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +29,32 @@ type unloadReq struct {
 	timeout time.Duration
 	respond chan struct{}
 }
+
+// leakGone is sent by a leak watcher when a force-killed model's upstream stops
+// answering. gen identifies the watch that saw it, so a report from a watch
+// that was replaced or cancelled in the meantime is dropped.
+type leakGone struct {
+	modelID string
+	gen     uint64
+}
+
+// leakWatch is one running leak watcher. Only the run loop touches these.
+type leakWatch struct {
+	gen    uint64
+	cancel context.CancelFunc
+}
+
+// Leak-watch probe cadence. The interval is 5s because a force-killed
+// container's teardown (compose down after a missed unloadTimeout) takes tens of
+// seconds, so a finer poll buys nothing, while a request queued behind the leak
+// waits at most one interval past the container actually going away. The
+// per-probe timeout is 2s because the probe is a loopback GET that a live
+// server answers in milliseconds; a probe that times out is treated as "still
+// there" (see upstreamGone), so a short timeout only costs one more attempt.
+const (
+	defaultLeakProbeInterval = 5 * time.Second
+	defaultLeakProbeTimeout  = 2 * time.Second
+)
 
 // baseRouter owns the channels, run-loop, and process machinery shared by every
 // concrete router. Concrete routers embed *baseRouter and supply a
@@ -60,6 +88,16 @@ type baseRouter struct {
 	unloadCh    chan unloadReq
 	swapDoneCh  chan scheduler.SwapDone
 	serveDoneCh chan scheduler.ServeDoneEvent
+	leakGoneCh  chan leakGone
+
+	// leakWatches/leakGen are owned by the run loop: WatchLeak and UnwatchLeak
+	// are only called from the scheduler, which runs on it. The probe interval
+	// and timeout are read there too; tests shorten them before the first
+	// request.
+	leakWatches       map[string]leakWatch
+	leakGen           uint64
+	leakProbeInterval time.Duration
+	leakProbeTimeout  time.Duration
 
 	runDone chan struct{}
 
@@ -95,7 +133,12 @@ func newBaseRouter(
 		unloadCh:    make(chan unloadReq),
 		swapDoneCh:  make(chan scheduler.SwapDone),
 		serveDoneCh: make(chan scheduler.ServeDoneEvent),
+		leakGoneCh:  make(chan leakGone),
 		runDone:     make(chan struct{}),
+
+		leakWatches:       make(map[string]leakWatch),
+		leakProbeInterval: defaultLeakProbeInterval,
+		leakProbeTimeout:  defaultLeakProbeTimeout,
 	}
 	sched, err := scheduler.New(conf, name, logger, planner, b)
 	if err != nil {
@@ -139,6 +182,15 @@ func (b *baseRouter) run() {
 
 		case ev := <-b.serveDoneCh:
 			b.schedule.OnServeDone(ev)
+
+		case ev := <-b.leakGoneCh:
+			// Only the current watch for the model counts; a stale one lost a
+			// race with UnwatchLeak/WatchLeak and its report means nothing now.
+			if w, ok := b.leakWatches[ev.modelID]; ok && w.gen == ev.gen {
+				w.cancel()
+				delete(b.leakWatches, ev.modelID)
+				b.schedule.OnLeakGone(ev.modelID)
+			}
 		}
 	}
 }
@@ -200,23 +252,132 @@ func (b *baseRouter) GrantServe(req scheduler.HandlerReq, modelID string) bool {
 }
 
 // StopProcesses implements scheduler.Effects, stopping the named processes in
-// parallel and blocking until all have stopped.
-func (b *baseRouter) StopProcesses(timeout time.Duration, ids []string) {
+// parallel and blocking until all have stopped. It returns the IDs whose stop
+// was forced (process.ErrForcedKill).
+func (b *baseRouter) StopProcesses(timeout time.Duration, ids []string) []string {
 	var wg sync.WaitGroup
-	for _, id := range ids {
+	forcedAt := make([]bool, len(ids))
+	for i, id := range ids {
 		p, ok := b.processes[id]
 		if !ok {
 			continue
 		}
 		wg.Add(1)
-		go func(id string, p process.Process) {
+		go func(idx int, id string, p process.Process) {
 			defer wg.Done()
 			if err := p.Stop(timeout); err != nil {
 				b.logger.Warnf("%s: stopping %s failed: %v", b.name, id, err)
+				forcedAt[idx] = errors.Is(err, process.ErrForcedKill)
 			}
-		}(id, p)
+		}(i, id, p)
 	}
 	wg.Wait()
+	var forced []string
+	for i, f := range forcedAt {
+		if f {
+			forced = append(forced, ids[i])
+		}
+	}
+	return forced
+}
+
+// WatchLeak implements scheduler.Effects. It probes the model's proxy URL +
+// checkEndpoint every leakProbeInterval and reports leakGone once the upstream
+// stops answering. A model with no proxy cannot be probed; its leak then lasts
+// until it is started again, because clearing it blind could admit a load on
+// top of memory that is still held.
+func (b *baseRouter) WatchLeak(modelID string) {
+	b.UnwatchLeak(modelID)
+	url := leakProbeURL(b.config.Models[modelID])
+	if url == "" {
+		b.logger.Warnf("%s: cannot watch leaked model %s: no proxy URL to probe", b.name, modelID)
+		return
+	}
+	ctx, cancel := context.WithCancel(b.shutdownCtx)
+	b.leakGen++
+	gen := b.leakGen
+	b.leakWatches[modelID] = leakWatch{gen: gen, cancel: cancel}
+	go b.watchLeak(ctx, modelID, gen, url, b.leakProbeInterval, b.leakProbeTimeout)
+}
+
+// UnwatchLeak implements scheduler.Effects.
+func (b *baseRouter) UnwatchLeak(modelID string) {
+	if w, ok := b.leakWatches[modelID]; ok {
+		w.cancel()
+		delete(b.leakWatches, modelID)
+	}
+}
+
+// watchLeak is the probe loop behind WatchLeak. It never touches router state:
+// its only output is the leakGone event, handled on the run loop.
+func (b *baseRouter) watchLeak(ctx context.Context, modelID string, gen uint64, url string, interval, timeout time.Duration) {
+	// A fresh connection per probe (no keep-alive, no env proxy): the question
+	// is whether anything is listening on the model's port right now, and a
+	// pooled connection or an HTTP proxy would answer for it.
+	client := &http.Client{
+		Timeout:   timeout,
+		Transport: &http.Transport{DisableKeepAlives: true},
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		if !upstreamGone(ctx, client, url) {
+			continue
+		}
+		b.logger.Infof("%s: leaked model %s no longer answers on %s", b.name, modelID, url)
+		select {
+		case b.leakGoneCh <- leakGone{modelID: modelID, gen: gen}:
+		case <-ctx.Done():
+		}
+		return
+	}
+}
+
+// upstreamGone reports whether one probe of url shows nothing listening. Only a
+// connection-level failure (refused, reset, EOF) counts as gone. Any HTTP
+// response, including a 5xx, means a server is still up and so may still hold
+// its memory; a timeout cannot tell a gone upstream from a hung one, so it is
+// also treated as still there and the next probe decides.
+func upstreamGone(ctx context.Context, client *http.Client, url string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
+	if err == nil {
+		resp.Body.Close()
+		return false
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return false
+	}
+	return true
+}
+
+// leakProbeURL is the model's proxy URL + checkEndpoint, or the proxy root when
+// the health check is disabled ("none"); "" when there is no proxy.
+func leakProbeURL(mc config.ModelConfig) string {
+	proxy := strings.TrimRight(strings.TrimSpace(mc.Proxy), "/")
+	if proxy == "" {
+		return ""
+	}
+	endpoint := strings.TrimSpace(mc.CheckEndpoint)
+	if endpoint == "" || endpoint == "none" {
+		endpoint = "/"
+	}
+	if !strings.HasPrefix(endpoint, "/") {
+		endpoint = "/" + endpoint
+	}
+	return proxy + endpoint
 }
 
 // trackedServe is the wrapper that closes the loop on in-flight tracking.
@@ -251,6 +412,7 @@ func (b *baseRouter) doSwap(modelID string, toStop []string) {
 	// expiry, a manual unload, or a swap").
 	var wg sync.WaitGroup
 	stopErrs := make([]error, len(toStop))
+	var leaked []string
 	for i, mID := range toStop {
 		wg.Add(1)
 		go func(idx int, p process.Process, id string) {
@@ -262,6 +424,14 @@ func (b *baseRouter) doSwap(modelID string, toStop []string) {
 		}(i, b.processes[mID], mID)
 	}
 	wg.Wait()
+	// A forced kill leaves the process Stopped while its upstream may still hold
+	// memory; the scheduler keeps charging it (SwapDone.Leaked) until the leak
+	// watcher sees it gone, so the NEXT request is not admitted on top of it.
+	for i, err := range stopErrs {
+		if errors.Is(err, process.ErrForcedKill) {
+			leaked = append(leaked, toStop[i])
+		}
+	}
 
 	// With the memory-admission ledger on, the fit check that authorised this
 	// swap CREDITED the evictees' ceilings as freed (residentAfter =
@@ -275,7 +445,7 @@ func (b *baseRouter) doSwap(modelID string, toStop []string) {
 			err := fmt.Errorf("%s: aborting swap to %s, eviction did not complete: %w", b.name, modelID, stopErr)
 			b.logger.Errorf("%v", err)
 			select {
-			case b.swapDoneCh <- scheduler.SwapDone{ModelID: modelID, Err: err}:
+			case b.swapDoneCh <- scheduler.SwapDone{ModelID: modelID, Err: err, Leaked: leaked}:
 			case <-b.shutdownCtx.Done():
 			}
 			return
@@ -295,9 +465,14 @@ func (b *baseRouter) doSwap(modelID string, toStop []string) {
 		// that is expected rather than worth a warning per model.
 		b.logger.Warnf("%s: starting %s failed: %v", b.name, modelID, err)
 	}
+	// A failed start whose own teardown was forced (process wraps it into the
+	// start error) may have left the target's container up too.
+	if errors.Is(err, process.ErrForcedKill) {
+		leaked = append(leaked, modelID)
+	}
 
 	select {
-	case b.swapDoneCh <- scheduler.SwapDone{ModelID: modelID, Err: err}:
+	case b.swapDoneCh <- scheduler.SwapDone{ModelID: modelID, Err: err, Leaked: leaked}:
 	case <-b.shutdownCtx.Done():
 	}
 }

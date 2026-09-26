@@ -4,7 +4,7 @@ summary: How ttl, globalTTL, unloadTimeout and Docker cmdStop interact, plus how
 category: guides
 tags: [ttl, unload, vram, memory, idle, docker, container, cmd-stop]
 config_keys: [globalTTL, unloadTimeout, models.*.ttl, models.*.unloadTimeout, models.*.cmdStop]
-updated: 2026-08-25
+updated: 2026-09-25
 ---
 
 # Automatic model unloading with ttl
@@ -53,7 +53,8 @@ models:
     unloadTimeout: 30    # docker stop is slow
 ```
 
-It applies to every unload — TTL expiry, a manual unload, or a swap. A model
+It applies to every unload — TTL expiry, a manual unload, or a swap — and to
+tearing down a model that is stopped or fails while still starting. A model
 whose `unloadTimeout` is `0` uses the global value.
 
 Raise it for anything slow to shut down: containers, vLLM, anything with a

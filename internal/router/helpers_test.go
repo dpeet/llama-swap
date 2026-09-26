@@ -78,6 +78,13 @@ type fakeProcess struct {
 	// still ends in StateStopped (see TestProcessCommand_StopReturnsErrorOnForcedKill).
 	stopErr error
 
+	// forcedKill, when true, makes Stop of a running process behave like a real
+	// ProcessCommand whose graceful window expired: the process ends in
+	// StateStopped and Stop returns process.ErrForcedKill (while the upstream it
+	// supervised may still be up). Stopping an already-stopped process stays a
+	// no-op returning nil, as it is for the real one.
+	forcedKill bool
+
 	runCalls     atomic.Int32
 	stopCalls    atomic.Int32
 	detachCalls  atomic.Int32
@@ -227,6 +234,9 @@ func (f *fakeProcess) Stop(timeout time.Duration) error {
 	case <-f.stopCh:
 	default:
 		close(f.stopCh)
+	}
+	if f.forcedKill {
+		return process.ErrForcedKill
 	}
 	return nil
 }

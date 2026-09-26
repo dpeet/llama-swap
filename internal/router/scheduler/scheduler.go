@@ -66,6 +66,9 @@ type Scheduler interface {
 	// swap waiters and queued requests). Process teardown is the baseRouter's
 	// responsibility.
 	OnShutdown(err error)
+	// OnLeakGone handles the leak watcher reporting that a force-killed model's
+	// upstream stopped answering (see Effects.WatchLeak): its memory is free.
+	OnLeakGone(modelID string)
 }
 
 // Effects is implemented by the baseRouter. The scheduler calls back through it
@@ -88,8 +91,15 @@ type Effects interface {
 	// its in-flight count only when this returns true.
 	GrantServe(req HandlerReq, modelID string) bool
 	// StopProcesses stops the named processes in parallel and blocks until all
-	// have stopped. Unknown IDs are skipped.
-	StopProcesses(timeout time.Duration, ids []string)
+	// have stopped. Unknown IDs are skipped. It returns the IDs whose stop had
+	// to force-kill (process.ErrForcedKill): their upstream may still hold
+	// memory although the process now reports stopped.
+	StopProcesses(timeout time.Duration, ids []string) (forced []string)
+	// WatchLeak starts probing a force-killed model's upstream and reports
+	// OnLeakGone once it stops answering. UnwatchLeak stops that probing. Both
+	// replace/cancel any earlier watch for the same model.
+	WatchLeak(modelID string)
+	UnwatchLeak(modelID string)
 }
 
 // New returns a Scheduler selected by conf.Routing.Scheduler.Use, configured
@@ -128,6 +138,10 @@ type HandlerResp struct {
 type SwapDone struct {
 	ModelID string
 	Err     error
+	// Leaked lists models (evictees, or the target itself when its failed start
+	// was force-killed) whose stop returned process.ErrForcedKill: they report
+	// stopped, but their upstream may still hold memory.
+	Leaked []string
 }
 
 // ServeDoneEvent is reported when a tracked ServeHTTP handler returns.

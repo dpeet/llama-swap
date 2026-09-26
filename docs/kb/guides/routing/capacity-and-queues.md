@@ -67,13 +67,24 @@ fits the budget. If it does not:
 - It is refused at once with HTTP 503 (`code: memory_admission`) when its own
   ceiling exceeds the budget, when it has no `memoryCeiling`, or when the
   models holding the budget are ones the router will not evict for it and
-  nothing in progress (a swap, a model stopping) could free memory. The message
+  nothing in progress (a swap, a model stopping, a force-killed model still
+  being watched, see below) could free memory. The message
   names the models holding the budget. Unload one of them, or change groups so
   the load evicts it.
 - It queues only while such work is in progress, and is served or refused with
   the same 503 once that settles. A streaming client already receiving the
   loading stream gets the refusal as an SSE error event followed by
   `data: [DONE]`.
+
+If stopping a model had to force-kill it (its `unloadTimeout` ran out), its
+container may still hold memory although llama-swap shows it stopped. With
+`memoryPool` set, llama-swap keeps counting that model's `memoryCeiling` and
+probes its `proxy` + `checkEndpoint` every 5 seconds; the ceiling is released
+only once nothing answers there (a 5xx still counts as up), or when the model
+is started again. Loads that need that memory queue meanwhile rather than fail.
+The log shows `was force-killed; counting its ... memoryCeiling` and later
+`leaked model ... cleared`. A container that never goes away blocks those loads
+until you stop it by hand.
 
 Already-running models and adopt attaches are never refused. Measure ceilings
 under real load: an under-sized ceiling lets two models in that do not fit.

@@ -48,6 +48,11 @@ type FIFO struct {
 	reserved map[string]int
 	inFlight map[string]int
 	queued   []HandlerReq
+	// leaked holds models whose stop force-killed (process.ErrForcedKill): the
+	// process reports stopped but its upstream may still hold memory, so fits
+	// keeps charging their ceilings until the leak watcher reports the upstream
+	// gone (OnLeakGone) or the model is started again (OnSwapDone).
+	leaked map[string]struct{}
 }
 
 // NewFIFO builds a FIFO scheduler. Per-model concurrency limits and memory
@@ -94,6 +99,7 @@ func NewFIFO(name string, logger *logmon.Monitor, planner Swapper, cfg config.Fi
 		active:   make(map[string]*activeSwap),
 		reserved: make(map[string]int),
 		inFlight: make(map[string]int),
+		leaked:   make(map[string]struct{}),
 	}
 }
 
@@ -271,6 +277,15 @@ func (s *FIFO) OnCancel(req HandlerReq) {
 // that no longer collide with the remaining active set. FIFO order is preserved:
 // items still blocked stay in place.
 func (s *FIFO) OnSwapDone(ev SwapDone) {
+	// Record leaks before the early return: a swap whose waiters OnUnload
+	// already released still force-killed what it force-killed.
+	s.recordLeaks(ev.Leaked)
+	if ev.Err == nil {
+		// Started again: its footprint is now counted as resident through the
+		// running set, so the leak entry would double-count it.
+		s.clearLeak(ev.ModelID, "started again")
+	}
+
 	sw, ok := s.active[ev.ModelID]
 	if !ok {
 		return
@@ -342,12 +357,47 @@ func (s *FIFO) OnUnload(targets []string, timeout time.Duration) {
 	// Stop the targeted processes. Done synchronously so Unload's caller can
 	// rely on "after Unload returns, the process is stopped". inFlight is
 	// intentionally NOT cleared here: each dying handler will fire its tracked
-	// serve and reach OnServeDone in the normal way.
-	s.effects.StopProcesses(timeout, targets)
+	// serve and reach OnServeDone in the normal way. A stop that force-killed
+	// is recorded as a leak so its memory is not credited as freed.
+	s.recordLeaks(s.effects.StopProcesses(timeout, targets))
 
 	// Removing entries from active above may have unblocked queued requests
 	// that previously collided with the now-cancelled swaps.
 	s.drainQueue()
+}
+
+// OnLeakGone clears a leak once the watcher saw its upstream stop answering,
+// then drains the queue: loads waiting on that memory may now fit.
+func (s *FIFO) OnLeakGone(modelID string) {
+	if _, ok := s.leaked[modelID]; !ok {
+		return
+	}
+	s.clearLeak(modelID, "upstream stopped answering")
+	s.drainQueue()
+}
+
+// recordLeaks marks force-killed models as still holding their ceilings and
+// starts watching their upstreams. A no-op with the gate off (pool == 0),
+// because there is no budget to charge them against.
+func (s *FIFO) recordLeaks(ids []string) {
+	if s.pool == 0 {
+		return
+	}
+	for _, id := range ids {
+		s.leaked[id] = struct{}{}
+		s.logger.Warnf("%s: %s was force-killed; counting its %d-byte memoryCeiling as resident until its upstream stops answering", s.name, id, s.ceilings[id])
+		s.effects.WatchLeak(id)
+	}
+}
+
+// clearLeak drops a leak entry (if any) and stops watching it.
+func (s *FIFO) clearLeak(modelID, why string) {
+	if _, ok := s.leaked[modelID]; !ok {
+		return
+	}
+	delete(s.leaked, modelID)
+	s.effects.UnwatchLeak(modelID)
+	s.logger.Infof("%s: leaked model %s cleared (%s); its memoryCeiling is no longer counted as leaked", s.name, modelID, why)
 }
 
 // OnShutdown grants err to every waiter still held by the scheduler.
@@ -452,10 +502,11 @@ func (s *FIFO) limit(modelID string) int {
 // fits reports whether target can be admitted under the memory budget once the
 // planned evict set is stopped. pool == 0 disables the gate (feature off). A
 // target with no configured ceiling can't be sized, so it never fits (the caller
-// treats that as a hard refuse via neverFits). running is the pre-swap resident +
-// in-flight set. It includes target whenever target's process is not stopped
-// (Starting, Ready, Stopping); the loop skips it so target is counted once, as
-// needed. A RESIDENT model with no ceiling is a config error: counted as 0
+// treats that as a hard refuse via neverFits). The charged set is memoryCharged:
+// running (the pre-swap resident + in-flight set) minus evict and target, plus
+// every leaked model. running includes target whenever target's process is not
+// stopped (Starting, Ready, Stopping); it is skipped so target is counted once,
+// as needed. A RESIDENT model with no ceiling is a config error: counted as 0
 // (best-effort) rather than deadlocking the queue — the shipped earlyoom +
 // fail-closed compose gate backstop an actual OOM.
 func (s *FIFO) fits(target string, evict, running []string) bool {
@@ -466,21 +517,11 @@ func (s *FIFO) fits(target string, evict, running []string) bool {
 		return false
 	}
 	budget := s.pool - s.reserve
-	evicted := make(map[string]struct{}, len(evict))
-	for _, id := range evict {
-		evicted[id] = struct{}{}
-	}
 	needed := s.ceilings[target]
 	if needed > budget {
 		return false
 	}
-	for _, id := range running {
-		if id == target {
-			continue
-		}
-		if _, gone := evicted[id]; gone {
-			continue
-		}
+	for _, id := range s.memoryCharged(target, evict, running) {
 		// A resident model with no configured ceiling is a config error (flagged
 		// once at startup in NewFIFO). Count it as 0 (best-effort) rather than
 		// deadlocking the queue; earlyoom + the fail-closed compose gate backstop
@@ -493,16 +534,56 @@ func (s *FIFO) fits(target string, evict, running []string) bool {
 	return true
 }
 
-// memoryHolders lists the models fits charges against the budget besides target
-// (running minus evict and target itself) with their ceilings in bytes, for the
-// memory-queue log line and the memory-refusal message.
-func (s *FIFO) memoryHolders(target string, evict, running []string) string {
-	var holders []string
+// memoryCharged is the set fits charges against the budget besides target:
+// running minus evict and target, then (sorted, not already listed) every
+// leaked model and every evictee of another in-flight swap.
+//   - A leaked model is charged even when it is in evict, because stopping it
+//     again does not free what a force-killed upstream still holds; only the
+//     leak watcher (or a fresh start) settles it.
+//   - An in-flight swap's evictees are charged until that swap reports done,
+//     even once their process reads Stopped, because whether the stop was
+//     forced (a leak) only arrives with its SwapDone; crediting them earlier
+//     would let this load in on top of a still-resident container.
+func (s *FIFO) memoryCharged(target string, evict, running []string) []string {
+	var out []string
+	seen := map[string]struct{}{target: {}}
 	for _, id := range running {
-		if id == target || containsString(evict, id) {
+		if _, dup := seen[id]; dup || containsString(evict, id) {
 			continue
 		}
-		holders = append(holders, fmt.Sprintf("%s=%d", id, s.ceilings[id]))
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	var extra []string
+	add := func(id string) {
+		if _, dup := seen[id]; dup {
+			return
+		}
+		seen[id] = struct{}{}
+		extra = append(extra, id)
+	}
+	for id := range s.leaked {
+		add(id)
+	}
+	for _, sw := range s.active {
+		for _, id := range sw.evict {
+			add(id)
+		}
+	}
+	sort.Strings(extra)
+	return append(out, extra...)
+}
+
+// memoryHolders lists memoryCharged with ceilings in bytes (leaked models
+// marked), for the memory-queue log line and the memory-refusal message.
+func (s *FIFO) memoryHolders(target string, evict, running []string) string {
+	var holders []string
+	for _, id := range s.memoryCharged(target, evict, running) {
+		h := fmt.Sprintf("%s=%d", id, s.ceilings[id])
+		if _, ok := s.leaked[id]; ok {
+			h += " (force-killed, may still hold memory)"
+		}
+		holders = append(holders, h)
 	}
 	if len(holders) == 0 {
 		return "none"
@@ -512,14 +593,16 @@ func (s *FIFO) memoryHolders(target string, evict, running []string) string {
 
 // memoryPending reports whether anything already in motion could still free
 // memory for a load that does not fit now: an in-flight swap (its evictions are
-// underway, and a failed start releases its target's share), or a model in
-// StateStopping (a stop that has not finished). Only then is it worth queuing an
-// over-budget load, because each ends in an event that runs drainQueue again.
+// underway, and a failed start releases its target's share), a model in
+// StateStopping (a stop that has not finished), or a leaked model (its upstream
+// is being watched). Only then is it worth queuing an over-budget load, because
+// each ends in an event that runs drainQueue again (OnSwapDone, OnUnload,
+// OnLeakGone).
 // The rule is deliberately coarse (it does not ask whether the pending work
 // would free enough): drainQueue re-checks and refuses once nothing is pending,
 // so the cost of a false "pending" is a bounded wait, not a stranded request.
 func (s *FIFO) memoryPending() bool {
-	if len(s.active) > 0 {
+	if len(s.active) > 0 || len(s.leaked) > 0 {
 		return true
 	}
 	for _, st := range s.effects.RunningModels() {
@@ -605,7 +688,8 @@ func (s *FIFO) enqueue(req HandlerReq) {
 // decision tree against the (now smaller) active set. Items that can now start
 // or join become satisfied; items still blocked remain queued in original order
 // and are retried the next time drainQueue runs. That is only on OnSwapDone,
-// on OnServeDone when a model's in-flight count reaches zero, and on OnUnload:
+// on OnServeDone when a model's in-flight count reaches zero, on OnUnload, and
+// on OnLeakGone:
 // a process that stops on its own (TTL expiry, upstream crash) sends the
 // scheduler no event, so the memory it frees goes unnoticed until one of those
 // fires.
