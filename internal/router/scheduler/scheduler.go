@@ -70,6 +70,11 @@ type Scheduler interface {
 	// upstream is gone (see Effects.WatchLeak): its memory is free. reason says
 	// how the watcher saw it (for the log).
 	OnLeakGone(modelID, reason string)
+	// OnLeakStale handles the leak watcher reporting that a force-killed
+	// model's upstream has been seen still running for longer than its
+	// teardown should take (see Effects.WatchLeak). The watch keeps running, so
+	// OnLeakGone may still follow. reason is for the log.
+	OnLeakStale(modelID, reason string)
 	// OnSelfStop handles a process that stopped without the router asking (a
 	// TTL unload or an upstream crash). forced reports that the stop had to
 	// force-kill (process.ErrForcedKill), so its upstream may still hold memory.
@@ -118,8 +123,11 @@ type Effects interface {
 	// OnLeakGone once it is gone. It returns whether a watch was started, i.e.
 	// whether the leak can clear on its own: false when there is nothing that
 	// could tell "gone" apart from "never came up" (no runningCheck and the
-	// upstream was never seen answering its checkEndpoint). UnwatchLeak stops
-	// the watch. Both replace/cancel any earlier watch for the same model.
+	// upstream was never seen answering its checkEndpoint). A watch whose
+	// upstream is still reported running after a model-specific bound (3x its
+	// unloadTimeout, at least 60s) also reports OnLeakStale once, and keeps
+	// watching. UnwatchLeak stops the watch. Both replace/cancel any earlier
+	// watch for the same model.
 	WatchLeak(modelID string) (watching bool)
 	UnwatchLeak(modelID string)
 	// RerunStop runs the cmdStop of already-stopped processes again, in

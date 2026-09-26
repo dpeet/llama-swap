@@ -1748,3 +1748,64 @@ func TestBaseRouter_EvictionWaitingOnForcedTTLStopRecordsLeak(t *testing.T) {
 		t.Fatalf("b retry status=%d runCalls=%d body=%q want 200/1", w2.Code, pb.runCalls.Load(), w2.Body.String())
 	}
 }
+
+// TestBaseRouter_StaleLeakRefusesPastBound: a's runningCheck keeps exiting 0
+// (its container genuinely came back up). Within the bound, c queues behind
+// the leak; once the watcher has seen a running for the bound, the queued c is
+// refused with the memory 503 naming a to unload, and so is a new request.
+func TestBaseRouter_StaleLeakRefusesPastBound(t *testing.T) {
+	skipWithoutShell(t)
+	a := newFakeProcess("a")
+	a.markReady()
+	pc := newFakeProcess("c")
+	pc.autoReady = true
+	b := newTestBaseWithConfig(t, leakCheckConfig("true", ""), map[string]process.Process{"a": a, "c": pc}, &stubPlanner{})
+	b.leakProbeInterval = 10 * time.Millisecond
+	b.leakStaleFloor = 500 * time.Millisecond // a's unloadTimeout is 0 here, so the floor is the bound
+	leakA(t, b, a)
+	waitProcessed(t, b.testProcessed, 1)
+
+	isStaleRefusal := func(w *httptest.ResponseRecorder) bool {
+		body := w.Body.String()
+		return w.Code == http.StatusServiceUnavailable && strings.Contains(body, "memory_admission") && strings.Contains(body, "unload a to release")
+	}
+	w, done := serveAsync(b, newRequest("c"))
+	select {
+	case <-done:
+		t.Fatalf("c finished before the bound: status=%d body=%q", w.Code, w.Body.String())
+	case <-time.After(150 * time.Millisecond):
+	}
+	waitSignal(t, done, "queued c refused once a's leak went stale")
+	if !isStaleRefusal(w) {
+		t.Fatalf("queued c status=%d body=%q want a 503 naming a to unload", w.Code, w.Body.String())
+	}
+
+	w2, done2 := serveAsync(b, newRequest("c"))
+	select {
+	case <-done2:
+	case <-time.After(2 * time.Second):
+		t.Fatal("new c request queued behind a stale leak")
+	}
+	if !isStaleRefusal(w2) {
+		t.Fatalf("new c status=%d body=%q want a 503 naming a to unload", w2.Code, w2.Body.String())
+	}
+	if got := pc.runCalls.Load(); got != 0 {
+		t.Fatalf("c.runCalls=%d want 0", got)
+	}
+}
+
+// TestBaseRouter_LeakStaleAfter pins the bound: 3x the model's unloadTimeout,
+// never below the floor.
+func TestBaseRouter_LeakStaleAfter(t *testing.T) {
+	conf := config.Config{HealthCheckTimeout: 5, Models: map[string]config.ModelConfig{
+		"slow":  {UnloadTimeout: 90},
+		"quick": {UnloadTimeout: 5},
+	}}
+	b := newTestBaseWithConfig(t, conf, map[string]process.Process{"slow": newFakeProcess("slow"), "quick": newFakeProcess("quick")}, &stubPlanner{})
+	if got := b.leakStaleAfter("slow"); got != 270*time.Second {
+		t.Errorf("leakStaleAfter(slow)=%v want 270s", got)
+	}
+	if got := b.leakStaleAfter("quick"); got != 60*time.Second {
+		t.Errorf("leakStaleAfter(quick)=%v want the 60s floor", got)
+	}
+}

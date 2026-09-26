@@ -35,12 +35,15 @@ type unloadReq struct {
 }
 
 // leakGone is sent by a leak watcher when a force-killed model's upstream is
-// gone. gen identifies the watch that saw it, so a report from a watch that was
-// replaced or cancelled in the meantime is dropped. reason is for the log.
+// gone, or (stale) when it has been reported still running for longer than a
+// teardown can take (see leakStaleAfter). gen identifies the watch that saw it,
+// so a report from a watch that was replaced or cancelled in the meantime is
+// dropped. reason is for the log.
 type leakGone struct {
 	modelID string
 	gen     uint64
 	reason  string
+	stale   bool
 }
 
 // selfStop is a process reporting a stop the router did not ask for (a TTL
@@ -70,10 +73,24 @@ type leakWatch struct {
 // run that times out also counts as "still running" (see runningCheckGone), so
 // a generous bound only delays the clear, while a tight one could never clear
 // on a slow daemon.
+//
+// A watched leak stops counting as pending (FIFO.OnLeakStale) once its upstream
+// has been reported still running for leakStaleFactor x the model's
+// unloadTimeout, at least defaultLeakStaleFloor. A force-kill already means the
+// upstream ignored one full unloadTimeout; the cmdStop that kill triggered
+// (e.g. `compose down`) normally finishes within about one more, so 3x leaves a
+// slow daemon a full extra window. Past that the upstream is most likely
+// genuinely running (e.g. a container that came up after its supervisor was
+// killed) and loads queued behind it would wait without bound. The 60s floor
+// keeps a small unloadTimeout from refusing loads that a container teardown,
+// which takes tens of seconds (see the probe interval above), would have let
+// in moments later.
 const (
 	defaultLeakProbeInterval   = 5 * time.Second
 	defaultLeakProbeTimeout    = 2 * time.Second
 	defaultRunningCheckTimeout = 10 * time.Second
+	defaultLeakStaleFloor      = 60 * time.Second
+	leakStaleFactor            = 3
 )
 
 // baseRouter owns the channels, run-loop, and process machinery shared by every
@@ -120,6 +137,7 @@ type baseRouter struct {
 	leakProbeInterval   time.Duration
 	leakProbeTimeout    time.Duration
 	runningCheckTimeout time.Duration
+	leakStaleFloor      time.Duration
 
 	runDone chan struct{}
 
@@ -163,6 +181,7 @@ func newBaseRouter(
 		leakProbeInterval:   defaultLeakProbeInterval,
 		leakProbeTimeout:    defaultLeakProbeTimeout,
 		runningCheckTimeout: defaultRunningCheckTimeout,
+		leakStaleFloor:      defaultLeakStaleFloor,
 	}
 	sched, err := scheduler.New(conf, name, logger, planner, b)
 	if err != nil {
@@ -226,9 +245,15 @@ func (b *baseRouter) run() {
 			b.notifyProcessed()
 
 		case ev := <-b.leakGoneCh:
-			// Only the current watch for the model counts; a stale one lost a
-			// race with UnwatchLeak/WatchLeak and its report means nothing now.
-			if w, ok := b.leakWatches[ev.modelID]; ok && w.gen == ev.gen {
+			// Only the current watch for the model counts; an outdated one lost
+			// a race with UnwatchLeak/WatchLeak and its report means nothing now.
+			w, ok := b.leakWatches[ev.modelID]
+			switch {
+			case !ok || w.gen != ev.gen:
+			case ev.stale:
+				// The watch keeps running, so the leak can still clear itself.
+				b.schedule.OnLeakStale(ev.modelID, ev.reason)
+			default:
 				w.cancel()
 				delete(b.leakWatches, ev.modelID)
 				b.schedule.OnLeakGone(ev.modelID, ev.reason)
@@ -408,8 +433,19 @@ func (b *baseRouter) WatchLeak(modelID string) bool {
 	b.leakGen++
 	gen := b.leakGen
 	b.leakWatches[modelID] = leakWatch{gen: gen, cancel: cancel}
-	go b.watchLeak(ctx, modelID, gen, probe, b.leakProbeInterval)
+	go b.watchLeak(ctx, modelID, gen, probe, b.leakProbeInterval, b.leakStaleAfter(modelID))
 	return true
+}
+
+// leakStaleAfter is how long a leak watch may keep seeing modelID's upstream
+// running before it reports the leak stale: leakStaleFactor x its
+// unloadTimeout, at least leakStaleFloor (see the constants for why).
+func (b *baseRouter) leakStaleAfter(modelID string) time.Duration {
+	d := leakStaleFactor * b.unloadTimeout(modelID)
+	if d < b.leakStaleFloor {
+		d = b.leakStaleFloor
+	}
+	return d
 }
 
 // RerunStop implements scheduler.Effects. It runs each model's cmdStop again
@@ -466,10 +502,14 @@ func (b *baseRouter) UnwatchLeak(modelID string) {
 
 // watchLeak is the probe loop behind WatchLeak. It never touches router state:
 // its only output is the leakGone event, handled on the run loop (whose
-// clearLeak logs the reason).
-func (b *baseRouter) watchLeak(ctx context.Context, modelID string, gen uint64, probe leakProbe, interval time.Duration) {
+// clearLeak logs the reason). Once every probe since the watch began has said
+// "still running" for staleAfter, it also sends one stale report and keeps
+// probing, so the leak can still clear on its own.
+func (b *baseRouter) watchLeak(ctx context.Context, modelID string, gen uint64, probe leakProbe, interval, staleAfter time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	started := time.Now()
+	reportedStale := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -478,6 +518,14 @@ func (b *baseRouter) watchLeak(ctx context.Context, modelID string, gen uint64, 
 		}
 		gone, reason := probe(ctx)
 		if !gone {
+			if !reportedStale && time.Since(started) >= staleAfter {
+				reportedStale = true
+				select {
+				case b.leakGoneCh <- leakGone{modelID: modelID, gen: gen, stale: true, reason: fmt.Sprintf("still running %v after its forced stop", staleAfter)}:
+				case <-ctx.Done():
+					return
+				}
+			}
 			continue
 		}
 		select {

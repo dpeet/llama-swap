@@ -2009,3 +2009,55 @@ func TestFIFO_Memory_EvicteeForcedStopLeftToItsSwap(t *testing.T) {
 		t.Fatalf("startsFor(c)=%d want 0 (a stays charged until b's SwapDone)", eff.startsFor("c"))
 	}
 }
+
+// ── Stale leaks (F2) ────────────────────────────────────────────────────────
+
+// TestFIFO_Memory_StaleLeakStopsCountingAsPending: a watched leak whose
+// upstream keeps being reported running used to count as pending forever, so
+// loads it blocked queued without bound. Before the watcher reports it stale a
+// blocked load queues; after, the queued one is refused at drain and a new one
+// gets the admission 503 naming the model to unload. It stays charged and
+// watched, and can still clear on its own.
+func TestFIFO_Memory_StaleLeakStopsCountingAsPending(t *testing.T) {
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"c": {MemoryCeiling: 60},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateReady
+	eff.states["c"] = process.StateStopped
+	eff.forced["a"] = true
+	s.OnUnload([]string{"a"}, time.Second)
+
+	queued := reqCh("c")
+	s.OnRequest(queued)
+	assertAdmitted(t, queued)
+	if len(s.queued) != 1 {
+		t.Fatalf("queued=%d want 1 before the leak is stale", len(s.queued))
+	}
+
+	s.OnLeakStale("a", "still running 270s after its forced stop")
+	assertMemoryRefused(t, eff, "c")
+	if len(s.queued) != 0 || eff.startsFor("c") != 0 {
+		t.Fatalf("queued=%d startsFor(c)=%d want 0/0", len(s.queued), eff.startsFor("c"))
+	}
+
+	r := reqCh("c")
+	s.OnRequest(r)
+	err := admitErr(t, r)
+	var memErr swaputil.MemoryAdmissionError
+	if !errors.As(err, &memErr) || !strings.Contains(memErr.Message, "unload a to release") {
+		t.Fatalf("admission err=%v want a MemoryAdmissionError naming a to unload", err)
+	}
+	if _, ok := s.leaked["a"]; !ok || !eff.watching["a"] {
+		t.Fatalf("leaked=%v watching=%v want a still charged and watched", s.leaked, eff.watching)
+	}
+
+	s.OnLeakGone("a", "test")
+	r2 := reqCh("c")
+	s.OnRequest(r2)
+	assertAdmitted(t, r2)
+	if eff.startsFor("c") != 1 {
+		t.Fatalf("startsFor(c)=%d want 1 once the stale leak cleared", eff.startsFor("c"))
+	}
+}

@@ -66,9 +66,11 @@ type FIFO struct {
 	// process reports stopped but its upstream may still hold memory, so fits
 	// keeps charging their ceilings until the leak watcher reports the upstream
 	// gone (OnLeakGone), the model is started again (OnSwapDone), or an unload
-	// re-runs its cmdStop successfully (OnUnload). The value is whether a
-	// watcher is running (Effects.WatchLeak): only such a leak can clear on its
-	// own, so only it counts as pending (memoryPending).
+	// re-runs its cmdStop successfully (OnUnload). The value is whether the
+	// leak counts as pending (memoryPending): true while a watcher is running
+	// (Effects.WatchLeak) and has not reported it stale (OnLeakStale). Only
+	// such a leak is expected to clear on its own soon; a stale one keeps its
+	// watcher, and may still clear, but loads it blocks are refused.
 	leaked map[string]bool
 }
 
@@ -516,6 +518,24 @@ func (s *FIFO) recordForcedStops() {
 	s.recordLeaks(s.effects.TakeForcedStops(exclude))
 }
 
+// OnLeakStale stops counting a watched leak as pending once its watcher has
+// seen the upstream still running for longer than a forced stop's teardown
+// takes. Such an upstream is most likely genuinely running (e.g. a container
+// that came up after its supervisor was SIGKILLed while its cmd waited to
+// start it), so loads it blocks would otherwise queue without bound. It stays
+// charged, and its watcher keeps running so it can still clear, but from now
+// on it is treated like an unwatched leak: a load it blocks gets the immediate
+// 503 naming it to unload, and the drain below refuses loads already queued
+// behind it (unless something else is still pending).
+func (s *FIFO) OnLeakStale(modelID, reason string) {
+	if watching, ok := s.leaked[modelID]; !ok || !watching {
+		return
+	}
+	s.leaked[modelID] = false
+	s.logger.Warnf("%s: leaked model %s is %s; no longer waiting for it: loads that need its %d-byte memoryCeiling are refused until it is unloaded (its cmdStop completes) or its runningCheck/probe sees it gone", s.name, modelID, reason, s.ceilings[modelID])
+	s.drainQueue()
+}
+
 // recordLeaks marks force-killed models as still holding their ceilings and
 // starts watching their upstreams. A no-op with the gate off (pool == 0),
 // because there is no budget to charge them against.
@@ -766,12 +786,13 @@ func (s *FIFO) leakNote(id string) string {
 // memory for a load that does not fit now: an in-flight swap (its evictions are
 // underway, and a failed start releases its target's share), a model in
 // StateStopping (a stop that has not finished), or a watched leaked model (its
-// upstream is being watched). Only then is it worth queuing an over-budget
-// load, because each ends in an event that runs drainQueue again (OnSwapDone,
-// OnUnload or OnSelfStop for a TTL stop, OnLeakGone). An unwatched leak is not
-// pending: nothing would ever report it gone, so a load waiting on it would
-// queue until its client gave up; it is refused instead, naming the model to
-// unload (memoryBlockedMessage).
+// upstream is being watched and has not been reported stale). Only then is it
+// worth queuing an over-budget load, because each ends in an event that runs
+// drainQueue again (OnSwapDone, OnUnload or OnSelfStop for a TTL stop,
+// OnLeakGone or OnLeakStale). An unwatched or stale leak is not pending:
+// nothing is expected to report it gone, so a load waiting on it would queue
+// until its client gave up; it is refused instead, naming the model to unload
+// (memoryBlockedMessage).
 // The rule is deliberately coarse (it does not ask whether the pending work
 // would free enough): drainQueue re-checks and refuses once nothing is pending,
 // so the cost of a false "pending" is a bounded wait, not a stranded request.
@@ -885,8 +906,8 @@ func (s *FIFO) enqueue(req HandlerReq) {
 // or join become satisfied; items still blocked remain queued in original order
 // and are retried the next time drainQueue runs. That is only on OnSwapDone,
 // on OnServeDone when a model's in-flight count reaches zero, on OnUnload, on
-// OnLeakGone, and on OnSelfStop (a process that stopped on its own: TTL
-// expiry, upstream crash).
+// OnLeakGone, on OnLeakStale, and on OnSelfStop (a process that stopped on
+// its own: TTL expiry, upstream crash).
 func (s *FIFO) drainQueue() {
 	// Before the empty check, so a forced TTL stop reported by OnSelfStop is
 	// recorded (and its watch started) even when nothing is queued.
