@@ -36,47 +36,50 @@
     return { valid: true };
   }
 
-  function handleFileSelect(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const file = target.files?.[0];
-    if (file) {
-      const validation = validateFile(file);
-      if (validation.valid) {
-        selectedFile = file;
-        $error = null;
-        transcriptionResult = null;
-      } else {
-        $error = validation.error || "Invalid file";
-        selectedFile = null;
-      }
+  function selectFile(file: File) {
+    const validation = validateFile(file);
+    if (validation.valid) {
+      selectedFile = file;
+      $error = null;
+      transcriptionResult = null;
+    } else {
+      $error = validation.error || "Invalid file";
+      selectedFile = null;
     }
   }
 
+  function handleFileSelect(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (file) selectFile(file);
+  }
+
+  // The whole panel is the drop target in every state (file chosen, result, error) so a new file can
+  // replace the old one, and preventDefault stops the browser from navigating away to open the file.
+  // Drops are ignored mid-transcription because the running request still owns the selected file.
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
+    if (isTranscribing) {
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
+      return;
+    }
     isDragging = true;
   }
 
-  function handleDragLeave() {
-    isDragging = false;
+  function handleDragLeave(event: DragEvent) {
+    // dragleave also fires when the pointer crosses into a child element; only clear the highlight
+    // when it actually leaves the panel, or it flickers while hovering over the text.
+    const panel = event.currentTarget as HTMLElement;
+    if (!panel.contains(event.relatedTarget as Node | null)) isDragging = false;
   }
 
   function handleDrop(event: DragEvent) {
     event.preventDefault();
     isDragging = false;
+    if (isTranscribing) return;
 
     const file = event.dataTransfer?.files[0];
-    if (file) {
-      const validation = validateFile(file);
-      if (validation.valid) {
-        selectedFile = file;
-        $error = null;
-        transcriptionResult = null;
-      } else {
-        $error = validation.error || "Invalid file";
-        selectedFile = null;
-      }
-    }
+    if (file) selectFile(file);
   }
 
   async function transcribe() {
@@ -129,8 +132,19 @@
     <EmptyState message="No models configured. Add models to your configuration to transcribe audio." />
   {:else}
     <!-- File upload / Result display area -->
-    <div class="flex-1 overflow-auto mb-4 flex items-center justify-center bg-background border border-border rounded-md">
-      {#if isTranscribing}
+    <div
+      role="region"
+      aria-label="Audio file drop zone"
+      class="flex-1 overflow-auto mb-4 flex items-center justify-center rounded-md border-2 border-dashed transition-colors {isDragging ? 'border-primary bg-primary/10' : 'border-border bg-background'}"
+      ondragover={handleDragOver}
+      ondragleave={handleDragLeave}
+      ondrop={handleDrop}
+    >
+      {#if isDragging}
+        <p class="text-primary font-medium pointer-events-none">
+          {selectedFile || transcriptionResult ? "Drop to replace the current file" : "Drop audio file to select it"}
+        </p>
+      {:else if isTranscribing}
         <div class="text-center text-muted-foreground">
           <div class="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-2"></div>
           <p>Transcribing audio...</p>
@@ -168,20 +182,17 @@
           <p class="text-xs mt-1">{formatFileSize(selectedFile.size)}</p>
         </div>
       {:else}
-        <div
-          role="region"
-          aria-label="Audio file drop zone"
-          class="w-full h-full flex items-center justify-center text-center text-muted-foreground p-8 {isDragging ? 'bg-primary/10' : ''}"
-          ondragover={handleDragOver}
-          ondragleave={handleDragLeave}
-          ondrop={handleDrop}
+        <button
+          type="button"
+          class="w-full h-full flex items-center justify-center text-center text-muted-foreground p-8 cursor-pointer hover:bg-muted/40"
+          onclick={() => fileInput?.click()}
         >
           <div>
             <p class="mb-2">Drag and drop an audio file here</p>
-            <p class="text-sm">or use the Browse button below</p>
+            <p class="text-sm">or click to browse</p>
             <p class="text-xs mt-4">Accepted formats: MP3, WAV, OGG</p>
           </div>
-        </div>
+        </button>
       {/if}
     </div>
 
