@@ -1,8 +1,10 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -254,13 +256,16 @@ func (s *loadingWriter) sendData(data string) {
 // visible.
 //
 // The frame carries the same envelope as a non-streamed error body (#1038), so
-// a client sees one error shape either way. The status only selects the
-// envelope's type/code — 500 matches what this error would have been answered
-// with had the stream not already committed a 200.
+// a client sees one error shape either way. An error that carries its own
+// response (swaputil.HTTPError, e.g. a drain-time memory-admission refusal) is
+// framed with its own body, so the in-band error has the same type/code as the
+// 503 swaputil.SendError would have sent. Any other error gets the 500
+// envelope, matching what it would have been answered with had the stream not
+// already committed a 200.
 //
 // Must be called before release, while writes still reach the client.
 func (s *loadingWriter) sendError(err error) {
-	jsonData := swaputil.NewErrorEnvelope(http.StatusInternalServerError, err.Error(), "").JSON()
+	jsonData := sseErrorEnvelope(err)
 
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -275,6 +280,22 @@ func (s *loadingWriter) sendError(err error) {
 	if flusher, ok := s.writer.(http.Flusher); ok {
 		flusher.Flush()
 	}
+}
+
+// sseErrorEnvelope renders err as the one-line JSON envelope an SSE data field
+// can carry. An HTTPError's body is used when it is JSON, compacted because a
+// newline would end the SSE field early; a non-JSON body cannot be framed, so it
+// falls back to an envelope built from the error's own status.
+func sseErrorEnvelope(err error) []byte {
+	var httpErr swaputil.HTTPError
+	if !errors.As(err, &httpErr) {
+		return swaputil.NewErrorEnvelope(http.StatusInternalServerError, err.Error(), "").JSON()
+	}
+	var buf bytes.Buffer
+	if json.Compact(&buf, httpErr.Body()) == nil {
+		return buf.Bytes()
+	}
+	return swaputil.NewErrorEnvelope(httpErr.StatusCode(), err.Error(), "").JSON()
 }
 
 // release fences the loadingWriter off from the underlying ResponseWriter.

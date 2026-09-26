@@ -1116,10 +1116,15 @@ func TestBaseRouter_MemoryDrainRefusalFramedIntoLoadingStream(t *testing.T) {
 			t.Errorf("line %q is not an SSE field; a client would silently ignore it", line)
 		}
 	}
-	for _, want := range []string{"memory admission refused", `\"c\" needs 80 bytes`, "b=30"} {
+	for _, want := range []string{`\"c\" needs 80 bytes`, "b=30"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("stream missing %q: %q", want, body)
 		}
+	}
+	// The frame keeps the refusal's own 503 envelope code; a generic 500
+	// internal_error would tell the client nothing retryable happened.
+	if !strings.Contains(body, `"code":"memory_admission"`) || strings.Contains(body, "internal_error") {
+		t.Errorf("error frame lost the memory_admission code: %q", body)
 	}
 	if !strings.HasSuffix(strings.TrimRight(body, "\n"), "data: [DONE]") {
 		t.Errorf("stream not terminated with [DONE]: %q", body)
