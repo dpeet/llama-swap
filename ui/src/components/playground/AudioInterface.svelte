@@ -24,7 +24,8 @@
 
   // Broad on purpose: our ASR backends decode every upload with ffmpeg, so anything with an audio track
   // works, video included. The extension list covers files whose browser MIME type comes back empty
-  // or generic (common for .opus, .m4b, .mkv); an unsupported file still fails with the server's error.
+  // or generic (common for .opus, .m4b, .mkv); an undecodable file comes back as a server error, and a
+  // file with no audio track as an empty result (shown as "No speech detected").
   const ACCEPTED_EXTENSIONS = [
     '.mp3', '.wav', '.ogg', '.oga', '.opus', '.flac', '.m4a', '.m4b', '.aac', '.wma', '.aiff', '.aif',
     '.amr', '.webm', '.mp4', '.m4v', '.mov', '.mkv', '.avi',
@@ -62,10 +63,12 @@
     if (file) selectFile(file);
   }
 
-  // The whole panel is the drop target in every state (file chosen, result, error) so a new file can
-  // replace the old one, and preventDefault stops the browser from navigating away to open the file.
-  // Drops are ignored mid-transcription because the running request still owns the selected file.
+  // The whole tab is the drop target in every state (file chosen, result, error) so a new file can
+  // replace the old one, and preventDefault stops the browser from navigating away to open the file —
+  // which would also kill a running transcription. Drops are ignored mid-transcription because the
+  // running request still owns the selected file. Non-file drags (selected text, links) are left alone.
   function handleDragOver(event: DragEvent) {
+    if (!event.dataTransfer?.types.includes("Files")) return;
     event.preventDefault();
     if (isTranscribing) {
       if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
@@ -76,12 +79,13 @@
 
   function handleDragLeave(event: DragEvent) {
     // dragleave also fires when the pointer crosses into a child element; only clear the highlight
-    // when it actually leaves the panel, or it flickers while hovering over the text.
-    const panel = event.currentTarget as HTMLElement;
-    if (!panel.contains(event.relatedTarget as Node | null)) isDragging = false;
+    // when it actually leaves the tab, or it flickers while moving over the controls.
+    const root = event.currentTarget as HTMLElement;
+    if (!root.contains(event.relatedTarget as Node | null)) isDragging = false;
   }
 
   function handleDrop(event: DragEvent) {
+    if (!event.dataTransfer?.types.includes("Files")) return;
     event.preventDefault();
     isDragging = false;
     if (isTranscribing) return;
@@ -124,7 +128,14 @@
   }
 </script>
 
-<div class="flex flex-col h-full">
+<div
+  role="region"
+  aria-label="Audio transcription (drop an audio file anywhere here)"
+  class="flex flex-col h-full"
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
+  ondrop={handleDrop}
+>
   <!-- Model selector -->
   <div class="shrink-0 flex flex-wrap gap-2 mb-4">
     <ModelSelector
@@ -141,16 +152,11 @@
   {:else}
     <!-- File upload / Result display area -->
     <div
-      role="region"
-      aria-label="Audio file drop zone"
       class="flex-1 overflow-auto mb-4 flex items-center justify-center rounded-md border-2 border-dashed transition-colors {isDragging ? 'border-primary bg-primary/10' : 'border-border bg-background'}"
-      ondragover={handleDragOver}
-      ondragleave={handleDragLeave}
-      ondrop={handleDrop}
     >
       {#if isDragging}
         <p class="text-primary font-medium pointer-events-none">
-          {selectedFile || transcriptionResult ? "Drop to replace the current file" : "Drop audio file to select it"}
+          {selectedFile || transcriptionResult !== null ? "Drop to replace the current file" : "Drop audio file to select it"}
         </p>
       {:else if isTranscribing}
         <div class="text-center text-muted-foreground">
@@ -162,7 +168,7 @@
           <p class="font-medium">Error</p>
           <p class="text-sm mt-1">{$error}</p>
         </div>
-      {:else if transcriptionResult}
+      {:else if transcriptionResult !== null}
         <div class="w-full h-full flex flex-col p-4">
           <div class="flex justify-between items-center mb-2">
             <h3 class="pb-0 font-medium">Transcription Result</h3>
@@ -180,7 +186,11 @@
             </Button>
           </div>
           <div class="flex-1 overflow-auto p-3 rounded-md border border-border bg-background whitespace-pre-wrap">
-            {transcriptionResult}
+            {#if transcriptionResult}
+              {transcriptionResult}
+            {:else}
+              <span class="text-muted-foreground italic">No speech detected</span>
+            {/if}
           </div>
         </div>
       {:else if selectedFile}
@@ -195,11 +205,11 @@
           class="w-full h-full flex items-center justify-center text-center text-muted-foreground p-8 cursor-pointer hover:bg-muted/40"
           onclick={() => fileInput?.click()}
         >
-          <div>
-            <p class="mb-2">Drag and drop an audio file here</p>
-            <p class="text-sm">or click to browse</p>
-            <p class="text-xs mt-4">Any audio or video file (MP3, WAV, OGG, M4A, FLAC, OPUS, MP4, …)</p>
-          </div>
+          <span class="block">
+            <span class="block mb-2">Drag and drop an audio file here</span>
+            <span class="block text-sm">or click to browse</span>
+            <span class="block text-xs mt-4">Any audio or video file (MP3, WAV, OGG, M4A, FLAC, OPUS, MP4, …)</span>
+          </span>
         </button>
       {/if}
     </div>
