@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -70,6 +71,13 @@ type fakeEffects struct {
 	forced map[string]bool
 	// watching is the set of models with a live leak watch.
 	watching map[string]bool
+	// unwatchable marks models WatchLeak cannot watch (no runningCheck and
+	// never seen healthy): it returns false for them and starts nothing.
+	unwatchable map[string]bool
+	// rerunOK marks models whose RerunStop cmdStop completes; reruns records
+	// every model RerunStop was asked to run.
+	rerunOK map[string]bool
+	reruns  []string
 }
 
 func newFakeEffects() *fakeEffects {
@@ -78,6 +86,8 @@ func newFakeEffects() *fakeEffects {
 		serveResult: map[string]bool{},
 		forced:      map[string]bool{},
 		watching:    map[string]bool{},
+		unwatchable: map[string]bool{},
+		rerunOK:     map[string]bool{},
 	}
 }
 
@@ -129,7 +139,25 @@ func (f *fakeEffects) StopProcesses(timeout time.Duration, ids []string) []strin
 	return forced
 }
 
-func (f *fakeEffects) WatchLeak(modelID string)   { f.watching[modelID] = true }
+func (f *fakeEffects) WatchLeak(modelID string) bool {
+	if f.unwatchable[modelID] {
+		return false
+	}
+	f.watching[modelID] = true
+	return true
+}
+
+func (f *fakeEffects) RerunStop(_ time.Duration, ids []string) []string {
+	var done []string
+	for _, id := range ids {
+		f.reruns = append(f.reruns, id)
+		if f.rerunOK[id] {
+			done = append(done, id)
+		}
+	}
+	return done
+}
+
 func (f *fakeEffects) UnwatchLeak(modelID string) { delete(f.watching, modelID) }
 
 // served counts grants that handed modelID a handler and were received.
@@ -1392,7 +1420,7 @@ func TestFIFO_Memory_ForcedKillEvicteeChargedUntilGone(t *testing.T) {
 		t.Fatalf("startsFor(b)=%d queued=%d want 1/1 (retry must wait for the leak, not load on top)", eff.startsFor("b"), len(s.queued))
 	}
 
-	s.OnLeakGone("a")
+	s.OnLeakGone("a", "test")
 	if _, ok := s.leaked["a"]; ok || eff.watching["a"] {
 		t.Fatalf("leaked=%v watching=%v want a cleared", s.leaked, eff.watching)
 	}
@@ -1428,7 +1456,7 @@ func TestFIFO_Memory_InFlightEvicteeChargedUntilSwapDone(t *testing.T) {
 	if eff.startsFor("c") != 0 || len(s.queued) != 1 {
 		t.Fatalf("startsFor(c)=%d queued=%d want 0/1 (a leaked: keep waiting)", eff.startsFor("c"), len(s.queued))
 	}
-	s.OnLeakGone("a")
+	s.OnLeakGone("a", "test")
 	if eff.startsFor("c") != 1 {
 		t.Fatalf("startsFor(c)=%d want 1 after a's leak cleared", eff.startsFor("c"))
 	}
@@ -1458,7 +1486,7 @@ func TestFIFO_Memory_UnloadForcedKillRecordsLeak(t *testing.T) {
 	if eff.startsFor("c") != 0 || len(s.queued) != 1 {
 		t.Fatalf("startsFor(c)=%d queued=%d want 0/1", eff.startsFor("c"), len(s.queued))
 	}
-	s.OnLeakGone("a")
+	s.OnLeakGone("a", "test")
 	if eff.startsFor("c") != 1 {
 		t.Fatalf("startsFor(c)=%d want 1 after the leak cleared", eff.startsFor("c"))
 	}
@@ -1560,7 +1588,7 @@ func TestFIFO_Memory_LeakedTargetWaitsForOwnLeak(t *testing.T) {
 		t.Errorf("memoryHolders=%q want the target's own leak named", s.memoryHolders("a", nil, nil))
 	}
 
-	s.OnLeakGone("a")
+	s.OnLeakGone("a", "test")
 	if eff.startsFor("a") != 1 || len(s.queued) != 0 {
 		t.Fatalf("startsFor(a)=%d queued=%d want 1/0 once a's old upstream is gone", eff.startsFor("a"), len(s.queued))
 	}
@@ -1704,7 +1732,7 @@ func TestFIFO_Memory_ForcedSelfStopRecordsLeak(t *testing.T) {
 	if eff.startsFor("c") != 0 || len(s.queued) != 1 {
 		t.Fatalf("startsFor(c)=%d queued=%d want 0/1 while a's leak is live", eff.startsFor("c"), len(s.queued))
 	}
-	s.OnLeakGone("a")
+	s.OnLeakGone("a", "test")
 	if eff.startsFor("c") != 1 {
 		t.Fatalf("startsFor(c)=%d want 1 after the leak cleared", eff.startsFor("c"))
 	}
@@ -1722,5 +1750,96 @@ func TestFIFO_Memory_LateForcedSelfStopIgnoredOnceRestarted(t *testing.T) {
 	s.OnSelfStop("a", true)
 	if len(s.leaked) != 0 {
 		t.Fatalf("leaked=%v want none: a is being started again", s.leaked)
+	}
+}
+
+// unwatchedLeakFIFO leaves a (60) leaked with no watch (WatchLeak returned
+// false: no runningCheck, never seen healthy) on a 100 pool, so c (60) cannot
+// fit beside it and nothing in progress could free it.
+func unwatchedLeakFIFO(t *testing.T) (*FIFO, *fakeEffects) {
+	t.Helper()
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"c": {MemoryCeiling: 60},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateStarting // killed while still loading
+	eff.states["c"] = process.StateStopped
+	eff.forced["a"] = true
+	eff.unwatchable["a"] = true
+	s.OnUnload([]string{"a"}, time.Second)
+	delete(eff.forced, "a")
+	if watching, ok := s.leaked["a"]; !ok || watching || eff.watching["a"] {
+		t.Fatalf("leaked=%v watching=%v want a leaked and unwatched", s.leaked, eff.watching)
+	}
+	return s, eff
+}
+
+// TestFIFO_Memory_UnwatchedLeakRefusesNamingIt: a leak nothing can report gone
+// is not pending, so a load blocked by it gets the 503 at once instead of
+// queuing until its client gives up, and the message tells the user which
+// model to unload. The same holds for a request for the leaked model itself.
+func TestFIFO_Memory_UnwatchedLeakRefusesNamingIt(t *testing.T) {
+	s, eff := unwatchedLeakFIFO(t)
+
+	for _, model := range []string{"c", "a"} {
+		r := reqCh(model)
+		s.OnRequest(r)
+		err := admitErr(t, r)
+		var memErr swaputil.MemoryAdmissionError
+		if !errors.As(err, &memErr) {
+			t.Fatalf("%s: admission err=%v want MemoryAdmissionError", model, err)
+		}
+		for _, want := range []string{"a=60 (", "leaked: force-killed, still running?", "unload a to release"} {
+			if !strings.Contains(memErr.Message, want) {
+				t.Errorf("%s: refusal message %q missing %q", model, memErr.Message, want)
+			}
+		}
+	}
+	if len(s.queued) != 0 || eff.startsFor("c") != 0 || eff.startsFor("a") != 0 {
+		t.Fatalf("queued=%d starts c/a=%d/%d want nothing queued or started", len(s.queued), eff.startsFor("c"), eff.startsFor("a"))
+	}
+}
+
+// TestFIFO_Memory_UnloadRerunsCmdStopOfStoppedLeak: Stop on an already-stopped
+// process is a no-op, so an unload of a stopped leaked model runs its cmdStop
+// again (Effects.RerunStop) and clears the leak only when that completed.
+func TestFIFO_Memory_UnloadRerunsCmdStopOfStoppedLeak(t *testing.T) {
+	s, eff := unwatchedLeakFIFO(t)
+
+	s.OnUnload([]string{"a", "c"}, time.Second) // cmdStop fails
+	if !slices.Equal(eff.reruns, []string{"a"}) {
+		t.Fatalf("reruns=%v want [a] (c is not leaked)", eff.reruns)
+	}
+	if _, ok := s.leaked["a"]; !ok {
+		t.Fatal("leak cleared although its cmdStop did not complete")
+	}
+
+	eff.rerunOK["a"] = true
+	s.OnUnload([]string{"a"}, time.Second)
+	if _, ok := s.leaked["a"]; ok {
+		t.Fatal("leak not cleared after its cmdStop completed")
+	}
+
+	r := reqCh("c")
+	s.OnRequest(r)
+	assertAdmitted(t, r)
+	if eff.startsFor("c") != 1 {
+		t.Fatalf("startsFor(c)=%d want 1 once a is released", eff.startsFor("c"))
+	}
+}
+
+// TestFIFO_Memory_UnwatchedLeakClearedWhenStartedAgain: the existing
+// "started again" rule also releases an unwatched leak.
+func TestFIFO_Memory_UnwatchedLeakClearedWhenStartedAgain(t *testing.T) {
+	s, eff := unwatchedLeakFIFO(t)
+	s.OnRequest(adoptReq("a"))
+	if eff.startsFor("a") != 1 {
+		t.Fatalf("startsFor(a)=%d want 1 (adopt bypasses the gate)", eff.startsFor("a"))
+	}
+	eff.states["a"] = process.StateReady
+	s.OnSwapDone(SwapDone{ModelID: "a"})
+	if _, ok := s.leaked["a"]; ok {
+		t.Fatalf("leaked=%v want a cleared after a successful start", s.leaked)
 	}
 }

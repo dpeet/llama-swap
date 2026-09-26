@@ -67,8 +67,9 @@ type Scheduler interface {
 	// responsibility.
 	OnShutdown(err error)
 	// OnLeakGone handles the leak watcher reporting that a force-killed model's
-	// upstream stopped answering (see Effects.WatchLeak): its memory is free.
-	OnLeakGone(modelID string)
+	// upstream is gone (see Effects.WatchLeak): its memory is free. reason says
+	// how the watcher saw it (for the log).
+	OnLeakGone(modelID, reason string)
 	// OnSelfStop handles a process that stopped without the router asking (a
 	// TTL unload or an upstream crash). forced reports that the stop had to
 	// force-kill (process.ErrForcedKill), so its upstream may still hold memory.
@@ -101,11 +102,20 @@ type Effects interface {
 	// to force-kill (process.ErrForcedKill): their upstream may still hold
 	// memory although the process now reports stopped.
 	StopProcesses(timeout time.Duration, ids []string) (forced []string)
-	// WatchLeak starts probing a force-killed model's upstream and reports
-	// OnLeakGone once it stops answering. UnwatchLeak stops that probing. Both
-	// replace/cancel any earlier watch for the same model.
-	WatchLeak(modelID string)
+	// WatchLeak starts watching a force-killed model's upstream and reports
+	// OnLeakGone once it is gone. It returns whether a watch was started, i.e.
+	// whether the leak can clear on its own: false when there is nothing that
+	// could tell "gone" apart from "never came up" (no runningCheck and the
+	// upstream was never seen answering its checkEndpoint). UnwatchLeak stops
+	// the watch. Both replace/cancel any earlier watch for the same model.
+	WatchLeak(modelID string) (watching bool)
 	UnwatchLeak(modelID string)
+	// RerunStop runs the cmdStop of already-stopped processes again, in
+	// parallel and bounded by timeout, for models whose forced kill may have
+	// left the upstream running (an owner's explicit unload). It returns the
+	// IDs whose cmdStop ran and exited 0 within timeout. A model whose cmdStop
+	// is unset or needs ${PID} (there is no process any more) is not included.
+	RerunStop(timeout time.Duration, ids []string) (completed []string)
 }
 
 // New returns a Scheduler selected by conf.Routing.Scheduler.Use, configured

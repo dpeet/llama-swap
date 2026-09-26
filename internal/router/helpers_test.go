@@ -104,6 +104,11 @@ type fakeProcess struct {
 
 	// selfStopFn is the router's OnSelfStop callback; selfStop invokes it.
 	selfStopFn func(error)
+
+	// seenHealthy backs UpstreamSeenHealthy like ProcessCommand's: set when
+	// the fake reaches Ready (its stand-in for a passed health check), cleared
+	// when a start begins, kept across a stop.
+	seenHealthy bool
 }
 
 func newFakeProcess(id string) *fakeProcess {
@@ -133,7 +138,10 @@ func (f *fakeProcess) setStateLocked(s process.ProcessState) {
 	}
 	f.state = s
 	switch s {
+	case process.StateStarting:
+		f.seenHealthy = false
 	case process.StateReady:
+		f.seenHealthy = true
 		select {
 		case <-f.readyCh:
 		default:
@@ -330,6 +338,12 @@ func (f *fakeProcess) WaitReady(ctx context.Context) error {
 }
 
 func (f *fakeProcess) Logger() *logmon.Monitor { return logmon.NewWriter(io.Discard) }
+
+func (f *fakeProcess) UpstreamSeenHealthy() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.seenHealthy
+}
 
 func (f *fakeProcess) OnSelfStop(fn func(error)) {
 	f.mu.Lock()

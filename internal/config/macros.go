@@ -209,7 +209,7 @@ func resolveConfigMacros(yamlStr string) (map[string]any, configMacroConfig, err
 }
 
 func stripRawCommandComments(model map[string]any) {
-	for _, field := range []string{"cmd", "cmdStop"} {
+	for _, field := range []string{"cmd", "cmdStop", "runningCheck"} {
 		if value, ok := model[field].(string); ok {
 			model[field] = StripComments(value)
 		}
@@ -359,7 +359,7 @@ func validateMacroUses(value any, path, modelID, fieldPath string, allowPID bool
 			}
 			if modelID != "" {
 				switch fieldPath {
-				case "cmd", "cmdStop", "proxy", "checkEndpoint", "filters.stripParams", "name", "description":
+				case "cmd", "cmdStop", "runningCheck", "proxy", "checkEndpoint", "filters.stripParams", "name", "description":
 					if macroName == "PORT" || macroName == "MODEL_ID" {
 						return fmt.Errorf("macro '${%s}' should have been substituted in %s.%s", macroName, modelID, fieldPath)
 					}
