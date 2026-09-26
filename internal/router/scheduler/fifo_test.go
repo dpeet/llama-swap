@@ -44,6 +44,7 @@ type grantRec struct {
 }
 
 type startRec struct {
+	ctx   context.Context
 	model string
 	evict []string
 }
@@ -96,8 +97,8 @@ func (f *fakeEffects) RunningModels() map[string]process.ProcessState {
 	return out
 }
 
-func (f *fakeEffects) StartSwap(modelID string, evict []string) {
-	f.starts = append(f.starts, startRec{model: modelID, evict: evict})
+func (f *fakeEffects) StartSwap(ctx context.Context, modelID string, evict []string) {
+	f.starts = append(f.starts, startRec{ctx: ctx, model: modelID, evict: evict})
 }
 
 func (f *fakeEffects) GrantError(req HandlerReq, err error) {
@@ -1562,5 +1563,92 @@ func TestFIFO_Memory_LeakedTargetWaitsForOwnLeak(t *testing.T) {
 	s.OnLeakGone("a")
 	if eff.startsFor("a") != 1 || len(s.queued) != 0 {
 		t.Fatalf("startsFor(a)=%d queued=%d want 1/0 once a's old upstream is gone", eff.startsFor("a"), len(s.queued))
+	}
+}
+
+// TestFIFO_Memory_UnloadMidEvictionKeepsSwapCharged: unloading b while its swap
+// is still evicting a (the UI's "Cancel load") releases b's waiter and cancels
+// the swap, but keeps its entry until SwapDone. Deleting it let c in on the
+// budget b and a still held while the orphaned swap went on to boot b. A
+// request for b in that window queues rather than joining the dead swap, and
+// is started afresh once the cancelled swap reports.
+func TestFIFO_Memory_UnloadMidEvictionKeepsSwapCharged(t *testing.T) {
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"b": {MemoryCeiling: 30},
+		"c": {MemoryCeiling: 50},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{evict: map[string][]string{"b": {"a"}}}, models, 100, 0)
+	eff.states["a"] = process.StateReady
+	eff.states["b"] = process.StateStopped
+	eff.states["c"] = process.StateStopped
+
+	s.OnRequest(reqCh("b"))
+	eff.states["a"] = process.StateStopping // b's swap is evicting a
+	s.OnUnload([]string{"b"}, time.Second)
+
+	if eff.errored("b") != 1 {
+		t.Fatalf("errored(b)=%d want 1 (the waiter is released at once)", eff.errored("b"))
+	}
+	if eff.starts[0].ctx.Err() == nil {
+		t.Fatal("b's swap ctx not cancelled; doSwap would go on to start b")
+	}
+	if sw, ok := s.active["b"]; !ok || !sw.cancelled {
+		t.Fatalf("active[b]=%+v want kept and marked cancelled until its SwapDone", sw)
+	}
+
+	eff.states["a"] = process.StateStopped // eviction finished; SwapDone not yet seen
+	rc := reqCh("c")
+	s.OnRequest(rc)
+	assertAdmitted(t, rc)
+	if eff.startsFor("c") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(c)=%d queued=%d want 0/1 (b and its evictee a stay charged: 30+60+50 > 100)", eff.startsFor("c"), len(s.queued))
+	}
+	rb := reqCh("b")
+	s.OnRequest(rb)
+	assertAdmitted(t, rb)
+	if eff.startsFor("b") != 1 || len(s.queued) != 2 || len(s.active["b"].waiters) != 0 {
+		t.Fatalf("startsFor(b)=%d queued=%d waiters=%d want 1/2/0 (b queues, not joining its cancelled swap)", eff.startsFor("b"), len(s.queued), len(s.active["b"].waiters))
+	}
+
+	s.OnSwapDone(SwapDone{ModelID: "b", Err: errors.New("swap to b cancelled: model unloaded")})
+	if len(eff.stops) != 1 {
+		t.Errorf("stops=%+v want only the unload's (a cancelled swap that did not start needs no extra stop)", eff.stops)
+	}
+	if eff.startsFor("c") != 1 || eff.startsFor("b") != 2 || len(s.queued) != 0 {
+		t.Fatalf("startsFor(c)=%d startsFor(b)=%d queued=%d want 1/2/0 once the cancelled swap reported", eff.startsFor("c"), eff.startsFor("b"), len(s.queued))
+	}
+	if eff.errored("b") != 1 {
+		t.Errorf("errored(b)=%d want 1 (the new request for b is served normally)", eff.errored("b"))
+	}
+}
+
+// TestFIFO_CancelledSwapThatStartedAnywayIsStopped: the unload's cancel can
+// land after doSwap's last check but before its start request reaches the
+// process, so the unload's Stop found nothing and the target booted. Its
+// successful SwapDone must stop it (with the unload's timeout), record a forced
+// stop as a leak, and not clear any leak.
+func TestFIFO_CancelledSwapThatStartedAnywayIsStopped(t *testing.T) {
+	models := map[string]config.ModelConfig{"b": {MemoryCeiling: 30}}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["b"] = process.StateStopped
+
+	s.OnRequest(reqCh("b"))
+	s.OnUnload([]string{"b"}, 3*time.Second) // b not started yet: nothing to stop
+	eff.states["b"] = process.StateReady     // ...then it started anyway
+	eff.forced["b"] = true
+
+	s.OnSwapDone(SwapDone{ModelID: "b"})
+	if len(eff.stops) != 2 || eff.stops[1].ids[0] != "b" || eff.stops[1].timeout != 3*time.Second {
+		t.Fatalf("stops=%+v want a second stop of b with the unload's 3s timeout", eff.stops)
+	}
+	if _, ok := s.leaked["b"]; !ok {
+		t.Fatalf("leaked=%v want b recorded (its stop was forced)", s.leaked)
+	}
+	if eff.served("b") != 0 || eff.errored("b") != 1 {
+		t.Errorf("served(b)=%d errored(b)=%d want 0/1 (only the unload's release)", eff.served("b"), eff.errored("b"))
+	}
+	if _, ok := s.active["b"]; ok {
+		t.Error("cancelled swap entry not removed on its SwapDone")
 	}
 }

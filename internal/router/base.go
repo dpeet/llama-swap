@@ -230,8 +230,8 @@ func (b *baseRouter) ModelState(modelID string) (process.ProcessState, bool) {
 }
 
 // StartSwap implements scheduler.Effects, launching the swap goroutine.
-func (b *baseRouter) StartSwap(modelID string, evict []string) {
-	go b.doSwap(modelID, evict)
+func (b *baseRouter) StartSwap(ctx context.Context, modelID string, evict []string) {
+	go b.doSwap(ctx, modelID, evict)
 }
 
 // GrantError implements scheduler.Effects.
@@ -402,7 +402,9 @@ func (b *baseRouter) trackedServe(modelID string, p process.Process) http.Handle
 	}
 }
 
-func (b *baseRouter) doSwap(modelID string, toStop []string) {
+// doSwap stops toStop, then starts modelID, and reports the outcome as a
+// SwapDone. ctx is cancelled when an unload cancels the swap (FIFO.OnUnload).
+func (b *baseRouter) doSwap(ctx context.Context, modelID string, toStop []string) {
 	// Evicted models use their configured unloadTimeout; the incoming target
 	// uses the (longer) cold-start healthCheckTimeout for its load. Previously
 	// both used healthCheckTimeout, so a stuck `docker stop` blocked the whole
@@ -450,6 +452,21 @@ func (b *baseRouter) doSwap(modelID string, toStop []string) {
 			}
 			return
 		}
+	}
+
+	// An unload of the target cancelled this swap while its evictions ran: do
+	// not start what the unload just asked to stop. The scheduler still holds
+	// the swap's entry, so the target and evictees stay charged until this
+	// SwapDone. The check cannot be atomic with EnsureReady (a cancel can land
+	// just after it); FIFO.OnSwapDone stops a target that started that way.
+	if ctx.Err() != nil {
+		err := fmt.Errorf("%s: swap to %s cancelled: model unloaded", b.name, modelID)
+		b.logger.Infof("%v", err)
+		select {
+		case b.swapDoneCh <- scheduler.SwapDone{ModelID: modelID, Err: err, Leaked: leaked}:
+		case <-b.shutdownCtx.Done():
+		}
+		return
 	}
 
 	// EnsureReady rather than a State() check followed by Run: the router must

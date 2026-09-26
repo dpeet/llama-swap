@@ -1231,3 +1231,51 @@ func TestBaseRouter_StopProcessesReportsForcedKills(t *testing.T) {
 		t.Fatalf("forced=%v want [a]", forced)
 	}
 }
+
+// TestBaseRouter_UnloadDuringEvictionDoesNotStartTarget: the UI's "Cancel load"
+// is an unload of the loading model. When it lands while the swap is still
+// stopping its evictee, the swap used to carry on and boot the target after
+// the unload had returned. The swap's ctx is now cancelled, so doSwap reports
+// an error instead of starting it, and a later request for the model loads it
+// normally.
+func TestBaseRouter_UnloadDuringEvictionDoesNotStartTarget(t *testing.T) {
+	a := newFakeProcess("a")
+	a.markReady()
+	a.stopBlock = make(chan struct{})
+	pb := newFakeProcess("b")
+	pb.autoReady = true
+	b := newTestBaseWithConfig(t, memGateConfig(100), map[string]process.Process{"a": a, "b": pb}, &stubPlanner{
+		evict: map[string][]string{"b": {"a"}},
+	})
+
+	wb := httptest.NewRecorder()
+	bDone := make(chan struct{})
+	go func() {
+		b.ServeHTTP(wb, newRequest("b"))
+		close(bDone)
+	}()
+	waitProcessed(t, b.testProcessed, 1)
+	waitSignal(t, a.stopStarted, "eviction of a")
+
+	b.Unload(time.Second, "b")
+	waitProcessed(t, b.testProcessed, 1)
+	waitSignal(t, bDone, "b request released by the unload")
+	if wb.Code == http.StatusOK || !strings.Contains(wb.Body.String(), "model unloaded") {
+		t.Fatalf("b status=%d body=%q want the unload error", wb.Code, wb.Body.String())
+	}
+
+	close(a.stopBlock)                   // eviction finishes after the unload returned
+	waitProcessed(t, b.testProcessed, 1) // the cancelled swap's SwapDone
+	if got := pb.runCalls.Load(); got != 0 {
+		t.Fatalf("b.runCalls=%d want 0: the cancelled swap must not start its target", got)
+	}
+	if got := pb.State(); got != process.StateStopped {
+		t.Fatalf("b state=%q want stopped", got)
+	}
+
+	w2 := httptest.NewRecorder()
+	b.ServeHTTP(w2, newRequest("b"))
+	if w2.Code != http.StatusOK || pb.runCalls.Load() != 1 {
+		t.Fatalf("later request status=%d runCalls=%d body=%q want 200/1", w2.Code, pb.runCalls.Load(), w2.Body.String())
+	}
+}
