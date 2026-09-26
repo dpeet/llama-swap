@@ -26,6 +26,21 @@ const (
 	testLogPollInterval = 10 * time.Millisecond
 )
 
+// testCmdStop is the cmdStop for tests that expect a clean stop (a nil Stop
+// error). Empty on Unix, where the default SIGTERM is a real graceful request.
+// On Windows the default graceful request is `taskkill /t` without /f, which
+// only posts WM_CLOSE to the tree's windows; the upstream runs with
+// CREATE_NO_WINDOW and has none, so the request never lands, the graceful
+// window expires, and Stop reports ErrForcedKill. Force-killing via cmdStop is
+// how a Windows config stops a windowless upstream, and the kill completes
+// inside the graceful window, so the stop is a clean one.
+var testCmdStop = func() string {
+	if runtime.GOOS == "windows" {
+		return "taskkill /f /t /pid ${PID}"
+	}
+	return ""
+}()
+
 func newProcessCommand(t *testing.T, conf config.ModelConfig) *ProcessCommand {
 	t.Helper()
 	logger := logmon.NewWriter(io.Discard)
@@ -163,6 +178,7 @@ func TestProcessCommand_StartStop(t *testing.T) {
 		Proxy:              fmt.Sprintf("http://127.0.0.1:%d", port),
 		CheckEndpoint:      "/health",
 		HealthCheckTimeout: 10,
+		CmdStop:            testCmdStop,
 	})
 	t.Cleanup(func() { p.Stop(testStopTimeout) })
 
@@ -227,6 +243,7 @@ func TestProcessCommand_Run_Idempotent(t *testing.T) {
 		Proxy:              fmt.Sprintf("http://127.0.0.1:%d", port),
 		CheckEndpoint:      "/health",
 		HealthCheckTimeout: 10,
+		CmdStop:            testCmdStop,
 	})
 	t.Cleanup(func() { p.Stop(testStopTimeout) })
 
@@ -255,6 +272,7 @@ func TestProcessCommand_Stop_Idempotent(t *testing.T) {
 		Proxy:              fmt.Sprintf("http://127.0.0.1:%d", port),
 		CheckEndpoint:      "/health",
 		HealthCheckTimeout: 10,
+		CmdStop:            testCmdStop,
 	})
 
 	if err := p.Stop(testStopTimeout); err != nil {
@@ -305,6 +323,7 @@ func TestProcessCommand_StopCancelsRun(t *testing.T) {
 		Proxy:              mock.URL,
 		CheckEndpoint:      "/health",
 		HealthCheckTimeout: 30,
+		CmdStop:            testCmdStop,
 	})
 
 	runErrCh := make(chan error, 1)
@@ -402,6 +421,7 @@ func TestProcessCommand_RunStopCycle(t *testing.T) {
 			Proxy:              fmt.Sprintf("http://127.0.0.1:%d", port),
 			CheckEndpoint:      "/health",
 			HealthCheckTimeout: 10,
+			CmdStop:            testCmdStop,
 		})
 
 		runErr := runAsync(t, p)
@@ -669,6 +689,7 @@ func TestProcessCommand_TTL_ResetsOnRequest(t *testing.T) {
 		Proxy:              mock.URL,
 		CheckEndpoint:      "/health",
 		HealthCheckTimeout: 10,
+		CmdStop:            testCmdStop,
 		UnloadAfter:        1, // 1-second TTL
 	})
 
@@ -791,6 +812,7 @@ func TestProcessCommand_TTL_ZeroDisables(t *testing.T) {
 		Proxy:              mock.URL,
 		CheckEndpoint:      "/health",
 		HealthCheckTimeout: 10,
+		CmdStop:            testCmdStop,
 		UnloadAfter:        0, // disabled
 	})
 

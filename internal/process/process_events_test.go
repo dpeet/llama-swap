@@ -32,6 +32,7 @@ func TestProcessCommand_EmitsStateChangeEvents(t *testing.T) {
 		Proxy:              fmt.Sprintf("http://127.0.0.1:%d", port),
 		CheckEndpoint:      "/health",
 		HealthCheckTimeout: 10,
+		CmdStop:            testCmdStop,
 	})
 
 	runErr := runAsync(t, p)
