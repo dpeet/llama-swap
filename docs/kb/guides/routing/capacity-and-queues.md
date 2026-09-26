@@ -81,7 +81,9 @@ container may still hold memory although llama-swap shows it stopped. With
 `memoryPool` set, llama-swap keeps counting that model's `memoryCeiling` and
 probes its `proxy` + `checkEndpoint` every 5 seconds; the ceiling is released
 only once nothing answers there (a 5xx still counts as up), or when the model
-is started again. Loads that need that memory queue meanwhile rather than fail.
+is adopted again. Loads that need that memory queue meanwhile rather than fail,
+and so does a request for the force-killed model itself, so it is not started
+against its own container while that is still being torn down.
 The log shows `was force-killed; counting its ... memoryCeiling` and later
 `leaked model ... cleared`. A container that never goes away blocks those loads
 until you stop it by hand.

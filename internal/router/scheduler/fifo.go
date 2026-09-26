@@ -511,7 +511,8 @@ func (s *FIFO) limit(modelID string) int {
 // fits reports whether target can be admitted under the memory budget once the
 // planned evict set is stopped. pool == 0 disables the gate (feature off). A
 // target with no configured ceiling can't be sized, so it never fits (the caller
-// treats that as a hard refuse via neverFits). The charged set is memoryCharged:
+// treats that as a hard refuse via neverFits). A leaked target does not fit
+// until its leak clears (see the check below). The charged set is memoryCharged:
 // running (the pre-swap resident + in-flight set) minus evict and target, plus
 // every leaked model. running includes target whenever target's process is not
 // stopped (Starting, Ready, Stopping); it is skipped so target is counted once,
@@ -523,6 +524,13 @@ func (s *FIFO) fits(target string, evict, running []string) bool {
 		return true
 	}
 	if s.ceilings[target] <= 0 {
+		return false
+	}
+	// A target that is itself leaked waits for its leak to clear, whatever the
+	// budget says: starting it now would run its start command (`compose up -d`)
+	// against its own force-killed container while that is still being torn
+	// down. The leak counts as pending, so the request queues until OnLeakGone.
+	if _, ok := s.leaked[target]; ok {
 		return false
 	}
 	budget := s.pool - s.reserve
@@ -587,6 +595,9 @@ func (s *FIFO) memoryCharged(target string, evict, running []string) []string {
 // marked), for the memory-queue log line and the memory-refusal message.
 func (s *FIFO) memoryHolders(target string, evict, running []string) string {
 	var holders []string
+	if _, ok := s.leaked[target]; ok {
+		holders = append(holders, fmt.Sprintf("%s=%d (itself force-killed, may still hold memory)", target, s.ceilings[target]))
+	}
 	for _, id := range s.memoryCharged(target, evict, running) {
 		h := fmt.Sprintf("%s=%d", id, s.ceilings[id])
 		if _, ok := s.leaked[id]; ok {
