@@ -280,13 +280,22 @@ func (s *FIFO) OnSwapDone(ev SwapDone) {
 	// Record leaks before the early return: a swap whose waiters OnUnload
 	// already released still force-killed what it force-killed.
 	s.recordLeaks(ev.Leaked)
-	if ev.Err == nil {
-		// Started again: its footprint is now counted as resident through the
-		// running set, so the leak entry would double-count it.
-		s.clearLeak(ev.ModelID, "started again")
-	}
 
 	sw, ok := s.active[ev.ModelID]
+	if ok && ev.Err == nil {
+		// Started again: its footprint is now counted as resident through the
+		// running set, so the leak entry would double-count it. Both guards are
+		// needed because a successful EnsureReady can be overtaken before its
+		// SwapDone arrives here. Owning the active entry rules out an OnUnload
+		// that already force-killed the target (it removed the entry and
+		// recorded the leak this stale success must not erase); the model still
+		// reading Ready rules out it having stopped on its own (TTL, crash) in
+		// that gap. Either alone leaves one of those paths able to clear a leak
+		// whose container may still be up.
+		if st, _ := s.effects.ModelState(ev.ModelID); st == process.StateReady {
+			s.clearLeak(ev.ModelID, "started again")
+		}
+	}
 	if !ok {
 		return
 	}

@@ -1495,3 +1495,45 @@ func TestFIFO_Memory_LeaksIgnoredWithGateOff(t *testing.T) {
 		t.Fatalf("leaked=%v watching=%v want none with the gate off", s.leaked, eff.watching)
 	}
 }
+
+// TestFIFO_Memory_StaleSwapDoneKeepsUnloadLeak: b's EnsureReady succeeded, but
+// before its SwapDone reached the run loop an unload (UI "Cancel load", or a
+// TTL) force-killed b and recorded the leak. The late SwapDone{Err: nil} is
+// stale and must not erase that leak while b's container may still be up.
+func TestFIFO_Memory_StaleSwapDoneKeepsUnloadLeak(t *testing.T) {
+	models := map[string]config.ModelConfig{"b": {MemoryCeiling: 60}}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["b"] = process.StateStopped
+	eff.forced["b"] = true
+
+	s.OnRequest(reqCh("b"))
+	eff.states["b"] = process.StateReady // EnsureReady returned nil
+	s.OnUnload([]string{"b"}, time.Second)
+	if _, ok := s.leaked["b"]; !ok {
+		t.Fatalf("leaked=%v want b recorded by the forced unload", s.leaked)
+	}
+
+	s.OnSwapDone(SwapDone{ModelID: "b"})
+	if _, ok := s.leaked["b"]; !ok || !eff.watching["b"] {
+		t.Fatalf("leaked=%v watching=%v want b still leaked and watched after a stale SwapDone", s.leaked, eff.watching)
+	}
+}
+
+// TestFIFO_Memory_SwapDoneForStoppedModelKeepsLeak: the swap still owns its
+// entry, but the model is no longer Ready when SwapDone is handled (it stopped
+// on its own in the gap), so the success says nothing about the leaked
+// container being gone.
+func TestFIFO_Memory_SwapDoneForStoppedModelKeepsLeak(t *testing.T) {
+	models := map[string]config.ModelConfig{"a": {MemoryCeiling: 60}}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateReady
+	eff.forced["a"] = true
+	s.OnUnload([]string{"a"}, time.Second) // a leaked
+
+	s.OnRequest(adoptReq("a")) // owns an active entry
+	eff.states["a"] = process.StateStopped
+	s.OnSwapDone(SwapDone{ModelID: "a"})
+	if _, ok := s.leaked["a"]; !ok {
+		t.Fatalf("leaked=%v want a kept: it was not Ready when its SwapDone arrived", s.leaked)
+	}
+}
