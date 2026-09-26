@@ -1475,7 +1475,7 @@ func TestFIFO_Memory_LeakClearedWhenModelStartsAgain(t *testing.T) {
 
 	s.OnRequest(adoptReq("a"))
 	if eff.startsFor("a") != 1 {
-		t.Fatalf("startsFor(a)=%d want 1 (the leaked model itself is not blocked by its own leak)", eff.startsFor("a"))
+		t.Fatalf("startsFor(a)=%d want 1 (adopt bypasses the gate, including the model's own leak)", eff.startsFor("a"))
 	}
 	eff.states["a"] = process.StateReady
 	s.OnSwapDone(SwapDone{ModelID: "a"})
@@ -1535,5 +1535,32 @@ func TestFIFO_Memory_SwapDoneForStoppedModelKeepsLeak(t *testing.T) {
 	s.OnSwapDone(SwapDone{ModelID: "a"})
 	if _, ok := s.leaked["a"]; !ok {
 		t.Fatalf("leaked=%v want a kept: it was not Ready when its SwapDone arrived", s.leaked)
+	}
+}
+
+// TestFIFO_Memory_LeakedTargetWaitsForOwnLeak: re-requesting a model whose own
+// stop force-killed must not start it while its old container may still be
+// tearing down, even though the budget would fit it. It queues (its leak is
+// pending) and starts once the leak watcher reports the upstream gone.
+func TestFIFO_Memory_LeakedTargetWaitsForOwnLeak(t *testing.T) {
+	models := map[string]config.ModelConfig{"a": {MemoryCeiling: 30}}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0) // 100: fits even charged twice
+	eff.states["a"] = process.StateReady
+	eff.forced["a"] = true
+	s.OnUnload([]string{"a"}, time.Second)
+
+	r := reqCh("a")
+	s.OnRequest(r)
+	assertAdmitted(t, r)
+	if eff.startsFor("a") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(a)=%d queued=%d want 0/1 (a waits for its own leak)", eff.startsFor("a"), len(s.queued))
+	}
+	if !strings.Contains(s.memoryHolders("a", nil, nil), "a=30 (itself force-killed") {
+		t.Errorf("memoryHolders=%q want the target's own leak named", s.memoryHolders("a", nil, nil))
+	}
+
+	s.OnLeakGone("a")
+	if eff.startsFor("a") != 1 || len(s.queued) != 0 {
+		t.Fatalf("startsFor(a)=%d queued=%d want 1/0 once a's old upstream is gone", eff.startsFor("a"), len(s.queued))
 	}
 }
