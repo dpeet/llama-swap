@@ -78,7 +78,7 @@ fits the budget. If it does not:
 
 If stopping a model had to force-kill it (its `unloadTimeout` ran out) for a swap, an unload or its `ttl`, its container may still hold memory although llama-swap shows it stopped. With `memoryPool` set, llama-swap keeps counting that model's `memoryCeiling` until it knows the container is gone:
 
-- With `runningCheck` set, it runs that command every 5 seconds: exit 0 means still running, and the first non-zero exit releases the ceiling. A run that takes over 10 seconds is killed and counts as still running.
+- With `runningCheck` set, it runs that command every 5 seconds: exit 0 means still running, and the first non-zero exit releases the ceiling. A run that takes over 10 seconds is killed and counts as still running, and so does a check killed by a signal (it never reported an exit status).
 - Otherwise it probes the model's `proxy` + `checkEndpoint` every 5 seconds and releases the ceiling once nothing answers there (a 5xx still counts as up), but only if this run of the model had passed its health check. A model killed while still loading never opened its port, so a refused connection proves nothing; its ceiling stays counted until you unload it (below). With `checkEndpoint: none` nothing is ever probed, so use `runningCheck`.
 - Starting or adopting the model again also releases it.
 

@@ -469,8 +469,10 @@ func (b *baseRouter) runningCheckProbe(modelID string, args, env []string) leakP
 }
 
 // runningCheckGone runs a leaked model's runningCheck once and reports whether
-// its upstream is gone. Only an exit with a non-zero status counts as gone
-// (the documented contract: 0 = still running). A run that times out (its
+// its upstream is gone. Only a normal exit with a non-zero status counts as
+// gone (the documented contract: 0 = still running). A check killed by a
+// signal (ExitCode -1: OOM killer, a stray SIGKILL) never reported a status,
+// so it counts as still running like a timeout. A run that times out (its
 // process group is killed) counts as still running, because a hung check,
 // typically a docker CLI waiting on a busy daemon, cannot prove the container
 // is gone, and a wrong "gone" admits a load on top of memory that is still
@@ -484,7 +486,11 @@ func runningCheckGone(ctx context.Context, logger *logmon.Monitor, name, modelID
 	case err == nil:
 		return false, ""
 	case errors.As(err, &exitErr):
-		return true, fmt.Sprintf("runningCheck exited %d", exitErr.ExitCode())
+		if exitErr.Exited() && exitErr.ExitCode() > 0 {
+			return true, fmt.Sprintf("runningCheck exited %d", exitErr.ExitCode())
+		}
+		logger.Debugf("%s: runningCheck for leaked model %s ended without an exit status (%v); treating it as still running", name, modelID, err)
+		return false, ""
 	case ctx.Err() != nil:
 		return false, ""
 	case errors.Is(err, process.ErrCommandTimedOut):
