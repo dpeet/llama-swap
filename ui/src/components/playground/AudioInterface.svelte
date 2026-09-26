@@ -22,15 +22,23 @@
   let fileInput = $state<HTMLInputElement | null>(null);
   let copied = $state(false);
 
-  const ACCEPTED_FORMATS = ['.mp3', '.wav', '.ogg'];
+  // Broad on purpose: our ASR backends decode every upload with ffmpeg, so anything with an audio track
+  // works, video included. The extension list covers files whose browser MIME type comes back empty
+  // or generic (common for .opus, .m4b, .mkv); an unsupported file still fails with the server's error.
+  const ACCEPTED_EXTENSIONS = [
+    '.mp3', '.wav', '.ogg', '.oga', '.opus', '.flac', '.m4a', '.m4b', '.aac', '.wma', '.aiff', '.aif',
+    '.amr', '.webm', '.mp4', '.m4v', '.mov', '.mkv', '.avi',
+  ];
+  const ACCEPT_ATTR = ['audio/*', 'video/*', ...ACCEPTED_EXTENSIONS].join(',');
 
   let canTranscribe = $derived(selectedFile !== null && $selectedModelStore !== "" && !isTranscribing);
 
   function validateFile(file: File): { valid: boolean; error?: string } {
     const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    const isMedia = file.type.startsWith('audio/') || file.type.startsWith('video/');
 
-    if (!ACCEPTED_FORMATS.includes(ext)) {
-      return { valid: false, error: 'Invalid file type. Accepted: MP3, WAV, OGG' };
+    if (!isMedia && !ACCEPTED_EXTENSIONS.includes(ext)) {
+      return { valid: false, error: 'Not an audio or video file' };
     }
 
     return { valid: true };
@@ -190,7 +198,7 @@
           <div>
             <p class="mb-2">Drag and drop an audio file here</p>
             <p class="text-sm">or click to browse</p>
-            <p class="text-xs mt-4">Accepted formats: MP3, WAV, OGG</p>
+            <p class="text-xs mt-4">Any audio or video file (MP3, WAV, OGG, M4A, FLAC, OPUS, MP4, …)</p>
           </div>
         </button>
       {/if}
@@ -200,7 +208,7 @@
     <div class="shrink-0 flex gap-2">
       <input
         type="file"
-        accept=".mp3,.wav,.ogg"
+        accept={ACCEPT_ATTR}
         class="hidden"
         onchange={handleFileSelect}
         bind:this={fileInput}
