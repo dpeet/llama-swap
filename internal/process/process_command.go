@@ -116,6 +116,10 @@ type startResult struct {
 	cancel    context.CancelFunc
 	handlerFn http.HandlerFunc
 	err       error
+	// killErr is the outcome of doStart's own teardown of a half-started
+	// process (abort): ErrForcedKill when it had to SIGKILL, so the upstream
+	// may still hold its memory. Nil when no teardown ran or it was graceful.
+	killErr error
 }
 
 type ProcessCommand struct {
@@ -155,6 +159,10 @@ type ProcessCommand struct {
 	// tearing it down. Reset to false before each start so an intrinsic startup
 	// failure (health timeout, premature exit) still runs the normal CmdStop.
 	pendingDetach atomic.Bool
+	// pendingStopTimeout carries the aborting stop request's graceful timeout
+	// (nanoseconds) into doStart's abort() the same way; 0 means no stop asked,
+	// and abort() falls back to the model's unloadTimeout (see abortTimeout).
+	pendingStopTimeout atomic.Int64
 }
 
 var _ Process = (*ProcessCommand)(nil)
@@ -341,6 +349,7 @@ func (p *ProcessCommand) run() {
 			setState(StateStarting)
 
 			p.pendingDetach.Store(false) // reset; a stop handler sets it if it aborts this start
+			p.pendingStopTimeout.Store(0)
 			startCtx, cancelStart := context.WithCancel(context.Background())
 			resultCh := make(chan startResult, 1)
 			go func() {
@@ -403,9 +412,16 @@ func (p *ProcessCommand) run() {
 						}()
 					}
 				} else {
+					startErr := res.err
+					if res.killErr != nil {
+						// Keep both: the caller needs the start failure, and a
+						// forced teardown means the upstream may still hold
+						// memory, which the router's ledger must see.
+						startErr = fmt.Errorf("%w (teardown: %w)", res.err, res.killErr)
+					}
 					setState(StateStopped)
-					notifyWaiters(res.err)
-					req.respond <- res.err
+					notifyWaiters(startErr)
+					req.respond <- startErr
 				}
 
 			// Stop arrived while doStart was still running. Cancel the
@@ -415,13 +431,18 @@ func (p *ProcessCommand) run() {
 			// must kill ourselves. The Run caller gets ErrAbort; the Stop
 			// caller is parked in pendingStop and answered below.
 			case stop := <-p.stopCh:
-				// Record detach intent before cancelling: doStart may tear the
-				// half-started process down itself via abort(), which reads this.
+				// Record detach intent and the stop's timeout before cancelling:
+				// doStart may tear the half-started process down itself via
+				// abort(), which reads both.
 				p.pendingDetach.Store(stop.detach)
+				p.pendingStopTimeout.Store(int64(stop.timeout))
 				cancelStart()
 				res := <-resultCh
 				if res.cmd != nil {
 					pendingStopErr = p.killProcess(res.cmd, res.cancel, res.cmdDone, stop.timeout, stop.detach)
+				} else {
+					// abort() already tore it down; its outcome is this stop's.
+					pendingStopErr = res.killErr
 				}
 				setState(StateStopped)
 				notifyWaiters(ErrStartAborted)
@@ -590,8 +611,8 @@ func (p *ProcessCommand) doStart(startCtx context.Context, healthCheckTimeout ti
 		// Honor a detach requested by the stop that aborted this start (set in
 		// the stopCh handler before cancelStart); an intrinsic failure leaves
 		// pendingDetach false, so CmdStop still runs to free a half-started model.
-		_ = p.killProcess(cmd, cmdCancel, cmdDone, 5*time.Second, p.pendingDetach.Load())
-		return startResult{err: err}
+		killErr := p.killProcess(cmd, cmdCancel, cmdDone, p.abortTimeout(), p.pendingDetach.Load())
+		return startResult{err: err, killErr: killErr}
 	}
 	prematureExit := func() startResult {
 		cmdCancel()
@@ -653,6 +674,22 @@ func (p *ProcessCommand) doStart(startCtx context.Context, healthCheckTimeout ti
 	}
 
 	return startResult{cmd: cmd, cmdDone: cmdDone, cancel: cmdCancel, handlerFn: handlerFn}
+}
+
+// abortTimeout is the graceful window doStart's abort() gives a half-started
+// process: the aborting stop's own timeout when a stop caused it, else the
+// model's unloadTimeout, because a container still booting can take as long to
+// tear down as a ready one, and SIGKILLing it early reports memory as freed
+// while the container may still hold it. The 5s floor only covers a zero
+// unloadTimeout, which config parsing never produces (it is the old fixed value).
+func (p *ProcessCommand) abortTimeout() time.Duration {
+	if t := time.Duration(p.pendingStopTimeout.Load()); t > 0 {
+		return t
+	}
+	if p.config.UnloadTimeout > 0 {
+		return time.Duration(p.config.UnloadTimeout) * time.Second
+	}
+	return 5 * time.Second
 }
 
 // sendStopSignal runs the configured CmdStop (if any) or sends SIGTERM to
