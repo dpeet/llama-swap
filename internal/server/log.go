@@ -140,6 +140,11 @@ func (sr *statusRecorder) WriteHeader(code int) {
 	if sr.wroteHeader {
 		return
 	}
+	// A 1xx is interim, not the final status: see swaputil.IsInformational.
+	if swaputil.IsInformational(code) {
+		sr.ResponseWriter.WriteHeader(code)
+		return
+	}
 	sr.status = code
 	sr.wroteHeader = true
 	sr.ResponseWriter.WriteHeader(code)
