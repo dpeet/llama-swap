@@ -170,6 +170,11 @@ type ProcessCommand struct {
 	// seenHealthy backs UpstreamSeenHealthy: cleared by run() when a start
 	// begins, set by doStart when the health check gets its 200.
 	seenHealthy atomic.Bool
+
+	// forcedStop backs TakeForcedStop: set by run() when a stop's killProcess
+	// returned ErrForcedKill (before the state reads Stopped), cleared when a
+	// start begins or when TakeForcedStop hands it out.
+	forcedStop atomic.Bool
 }
 
 var _ Process = (*ProcessCommand)(nil)
@@ -250,6 +255,15 @@ func (p *ProcessCommand) run() {
 			}
 		}
 		readyWaiters = nil
+	}
+
+	// noteStop records a forced stop for TakeForcedStop. Callers run it before
+	// setState(StateStopped), so anyone who sees the process Stopped after a
+	// forced stop also sees the flag.
+	noteStop := func(err error) {
+		if errors.Is(err, ErrForcedKill) {
+			p.forcedStop.Store(true)
+		}
 	}
 
 	// respondRun delivers the final Run result, if a Run caller is parked.
@@ -346,6 +360,10 @@ func (p *ProcessCommand) run() {
 				req.respond <- fmt.Errorf("[%s] could not be started in %s state", p.id, state)
 				continue
 			}
+			// A new run: the previous stop's outcome no longer describes it.
+			// Cleared before the state leaves Stopped, so a reader that sees
+			// Starting never takes the old run's report.
+			p.forcedStop.Store(false)
 			setState(StateStarting)
 			p.seenHealthy.Store(false) // a new run; doStart sets it once the health check passes
 
@@ -420,6 +438,7 @@ func (p *ProcessCommand) run() {
 						// memory, which the router's ledger must see.
 						startErr = fmt.Errorf("%w (teardown: %w)", res.err, res.killErr)
 					}
+					noteStop(res.killErr)
 					setState(StateStopped)
 					notifyWaiters(startErr)
 					req.respond <- startErr
@@ -445,6 +464,7 @@ func (p *ProcessCommand) run() {
 					// abort() already tore it down; its outcome is this stop's.
 					pendingStopErr = res.killErr
 				}
+				noteStop(pendingStopErr)
 				setState(StateStopped)
 				notifyWaiters(ErrStartAborted)
 				req.respond <- ErrStartAborted
@@ -488,6 +508,7 @@ func (p *ProcessCommand) run() {
 				cmdCancel = nil
 				p.handler.Store(nil)
 			}
+			noteStop(stopErr)
 			// Stop is a no-op (and not an error) when already Stopped — this
 			// is what makes it idempotent for callers that don't track state.
 			setState(StateStopped)
@@ -831,6 +852,11 @@ func (p *ProcessCommand) reportSelfStop(err error) {
 	if fn := p.selfStop.Load(); fn != nil && *fn != nil {
 		(*fn)(err)
 	}
+}
+
+// TakeForcedStop implements Process.
+func (p *ProcessCommand) TakeForcedStop() bool {
+	return p.forcedStop.CompareAndSwap(true, false)
 }
 
 // UpstreamSeenHealthy implements Process.

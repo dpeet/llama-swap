@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -108,6 +109,11 @@ type fakeProcess struct {
 	// the fake reaches Ready (its stand-in for a passed health check), cleared
 	// when a start begins, kept across a stop.
 	seenHealthy bool
+
+	// forcedStop backs TakeForcedStop like ProcessCommand's: set by a stop that
+	// returns (or reports) process.ErrForcedKill, cleared when a start begins
+	// or when it is taken.
+	forcedStop bool
 }
 
 func newFakeProcess(id string) *fakeProcess {
@@ -134,6 +140,7 @@ func (f *fakeProcess) setStateLocked(s process.ProcessState) {
 	switch s {
 	case process.StateStarting:
 		f.seenHealthy = false
+		f.forcedStop = false
 	case process.StateReady:
 		f.seenHealthy = true
 		select {
@@ -235,6 +242,7 @@ func (f *fakeProcess) Stop(timeout time.Duration) error {
 		close(f.stopCh)
 	}
 	if f.forcedKill {
+		f.forcedStop = true
 		return process.ErrForcedKill
 	}
 	return nil
@@ -333,6 +341,14 @@ func (f *fakeProcess) UpstreamSeenHealthy() bool {
 	return f.seenHealthy
 }
 
+func (f *fakeProcess) TakeForcedStop() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	taken := f.forcedStop
+	f.forcedStop = false
+	return taken
+}
+
 func (f *fakeProcess) OnSelfStop(fn func(error)) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -344,12 +360,53 @@ func (f *fakeProcess) OnSelfStop(fn func(error)) {
 // callback receives err (process.ErrForcedKill for a forced TTL stop).
 func (f *fakeProcess) selfStop(err error) {
 	f.mu.Lock()
+	if errors.Is(err, process.ErrForcedKill) {
+		f.forcedStop = true
+	}
 	f.setStateLocked(process.StateStopped)
 	select {
 	case <-f.stopCh:
 	default:
 		close(f.stopCh)
 	}
+	fn := f.selfStopFn
+	f.mu.Unlock()
+	if fn != nil {
+		fn(err)
+	}
+}
+
+// beginSelfStop models a TTL unload in progress: the process reads Stopping
+// and, like ProcessCommand's run loop parked in killProcess, a Stop or
+// EnsureReady that arrives meanwhile waits until finishSelfStop.
+func (f *fakeProcess) beginSelfStop() {
+	f.opMu.Lock()
+	f.setState(process.StateStopping)
+}
+
+// finishSelfStop ends the stop begun by beginSelfStop: the process reads
+// Stopped (with its forced-stop report set when err is ErrForcedKill) before
+// any waiting Stop or EnsureReady proceeds. The OnSelfStop report is NOT sent:
+// it is asynchronous in the real router, so tests deliver it with
+// reportSelfStop when they choose.
+func (f *fakeProcess) finishSelfStop(err error) {
+	f.mu.Lock()
+	if errors.Is(err, process.ErrForcedKill) {
+		f.forcedStop = true
+	}
+	f.setStateLocked(process.StateStopped)
+	select {
+	case <-f.stopCh:
+	default:
+		close(f.stopCh)
+	}
+	f.mu.Unlock()
+	f.opMu.Unlock()
+}
+
+// reportSelfStop delivers the OnSelfStop report for a finished self-stop.
+func (f *fakeProcess) reportSelfStop(err error) {
+	f.mu.Lock()
 	fn := f.selfStopFn
 	f.mu.Unlock()
 	if fn != nil {

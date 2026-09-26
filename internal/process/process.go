@@ -97,4 +97,16 @@ type Process interface {
 	// model's port after a forced kill means the upstream is gone, or only that
 	// it never opened the port.
 	UpstreamSeenHealthy() bool
+
+	// TakeForcedStop reports whether the most recent stop of this process had
+	// to force-kill (ErrForcedKill), on any path: an owner's Stop, a TTL unload,
+	// or the teardown of a failed or aborted start. It is recorded before the
+	// process reads Stopped, and cleared when a new start begins. The report is
+	// handed out once: a true return also clears it, so a caller that has
+	// accounted for the forced stop (the router's memory ledger records a leak)
+	// is not told again after that leak has been settled. The router needs it
+	// because a forced stop is otherwise only visible to whoever called the
+	// stop: a Stop on an already-stopped process returns nil, and a TTL stop's
+	// own report (OnSelfStop) arrives asynchronously.
+	TakeForcedStop() bool
 }
