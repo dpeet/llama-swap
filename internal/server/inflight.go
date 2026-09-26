@@ -330,6 +330,11 @@ func (w *inflightResponseWriter) WriteHeader(statusCode int) {
 	if w.wroteHeader {
 		return
 	}
+	// A 1xx is interim, not the final status: see swaputil.IsInformational.
+	if swaputil.IsInformational(statusCode) {
+		w.ResponseWriter.WriteHeader(statusCode)
+		return
+	}
 	w.wroteHeader = true
 	w.tracker.SetResponseHeaders(w.id, w.Header())
 	w.ResponseWriter.WriteHeader(statusCode)

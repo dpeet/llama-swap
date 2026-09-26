@@ -325,3 +325,32 @@ func extractStreamedContent(body string) string {
 	}
 	return result.String()
 }
+
+// codeLog records every WriteHeader call, because httptest.ResponseRecorder
+// latches the first code, 1xx included.
+type codeLog struct {
+	header http.Header
+	codes  []int
+}
+
+func (c *codeLog) Header() http.Header {
+	if c.header == nil {
+		c.header = make(http.Header)
+	}
+	return c.header
+}
+func (c *codeLog) Write(b []byte) (int, error) { return len(b), nil }
+func (c *codeLog) WriteHeader(code int)        { c.codes = append(c.codes, code) }
+
+// An interim 100 must pass through without latching, so the final status that
+// follows still reaches the client (see swaputil.IsInformational).
+func TestLoadingWriter_InformationalDoesNotLatch(t *testing.T) {
+	under := &codeLog{}
+	lw := &loadingWriter{writer: under}
+	lw.WriteHeader(http.StatusContinue)
+	lw.WriteHeader(http.StatusBadRequest)
+	lw.WriteHeader(http.StatusOK)
+	if got := fmt.Sprint(under.codes); got != "[100 400]" {
+		t.Errorf("underlying WriteHeader calls = %s, want [100 400]", got)
+	}
+}

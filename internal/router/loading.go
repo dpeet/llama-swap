@@ -301,6 +301,11 @@ func (s *loadingWriter) WriteHeader(statusCode int) {
 	if s.hasWritten {
 		return
 	}
+	// A 1xx is interim, not the final status: see swaputil.IsInformational.
+	if swaputil.IsInformational(statusCode) {
+		s.writer.WriteHeader(statusCode)
+		return
+	}
 	s.hasWritten = true
 	s.writer.WriteHeader(statusCode)
 	s.Flush()

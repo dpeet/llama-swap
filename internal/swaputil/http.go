@@ -86,6 +86,19 @@ func ShouldIgnoreWebsocket(r *http.Request, cfg config.Config) bool {
 // so it only ever appears in the access log and the activity store.
 const StatusClientClosedRequest = 499
 
+// IsInformational reports whether code is an interim 1xx status that precedes
+// the final one rather than replacing it. httputil.ReverseProxy forwards an
+// upstream's 1xx responses (e.g. 100 Continue for a client that sent
+// "Expect: 100-continue") by calling WriteHeader(1xx), and net/http allows any
+// number of those before the single final 2xx-5xx header. A ResponseWriter
+// wrapper must therefore pass them through without latching them as the
+// response status, or the real final status is dropped and the first body
+// Write implies 200. 101 Switching Protocols is excluded because it is final:
+// net/http sends no further headers after it and the connection is upgraded.
+func IsInformational(code int) bool {
+	return code >= 100 && code <= 199 && code != http.StatusSwitchingProtocols
+}
+
 // StatusMarker is implemented by the response recorders in the middleware
 // chain. It lets a status be recorded for logging and metrics without writing
 // anything to the client.
