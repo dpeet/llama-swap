@@ -972,3 +972,159 @@ func TestBaseRouter_Shutdown_DetachesConfiguredModels(t *testing.T) {
 		t.Errorf("drop.stopCalls=%d want 1", got)
 	}
 }
+
+// memBlockedConfig is the live GB10 shape behind P1, scaled to small units:
+// pool 121 - reserve 10 = budget 111; parakeet-asr (8) + qwen-asr (14) stay
+// resident beside the sglang model qwen38-27b (83); flash-vllm (100) evicts only
+// qwen38-27b, and 100 + 22 > 111.
+func memBlockedConfig() config.Config {
+	sendLoading := true
+	return config.Config{
+		HealthCheckTimeout: 5,
+		MemoryPool:         121,
+		MemoryReserve:      10,
+		Models: map[string]config.ModelConfig{
+			"parakeet-asr": {MemoryCeiling: 8},
+			"qwen-asr":     {MemoryCeiling: 14},
+			"qwen38-27b":   {MemoryCeiling: 83},
+			"flash-vllm":   {MemoryCeiling: 100, SendLoadingState: &sendLoading},
+		},
+	}
+}
+
+// TestBaseRouter_MemoryBlockedRefusedImmediately is the router-level P1
+// regression: a load that does not fit beside residents the planner will not
+// evict, with nothing in flight that could free memory, used to queue forever
+// (a streaming client got an endless "Queue position" stream). It must now be a
+// clean, immediate 503 on both the streaming and non-streaming paths.
+func TestBaseRouter_MemoryBlockedRefusedImmediately(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		req  func(string) *http.Request
+	}{
+		{"non-streaming", newRequest},
+		{"streaming", newStreamRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			procs := map[string]process.Process{}
+			for _, id := range []string{"parakeet-asr", "qwen-asr", "qwen38-27b", "flash-vllm"} {
+				p := newFakeProcess(id)
+				p.autoReady = true
+				if id != "flash-vllm" {
+					p.markReady()
+				}
+				procs[id] = p
+			}
+			b := newTestBaseWithConfig(t, memBlockedConfig(), procs, &stubPlanner{
+				evict: map[string][]string{"flash-vllm": {"qwen38-27b"}},
+			})
+
+			w := httptest.NewRecorder()
+			done := make(chan struct{})
+			go func() {
+				b.ServeHTTP(w, tc.req("flash-vllm"))
+				close(done)
+			}()
+			waitSignal(t, done, "flash-vllm request")
+
+			if w.Code != http.StatusServiceUnavailable {
+				t.Fatalf("status=%d want 503 body=%q", w.Code, w.Body.String())
+			}
+			body := w.Body.String()
+			if strings.Contains(body, "data: ") {
+				t.Fatalf("503 body contains a partial SSE stream: %q", body)
+			}
+			var envelope swaputil.ErrorEnvelope
+			if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil {
+				t.Fatalf("503 body is not an OpenAI error envelope: %v, body=%q", err, body)
+			}
+			if envelope.Error.Code != "memory_admission" {
+				t.Fatalf("error=%+v want code memory_admission", envelope.Error)
+			}
+			for _, want := range []string{"parakeet-asr=8", "qwen-asr=14"} {
+				if !strings.Contains(envelope.Error.Message, want) {
+					t.Errorf("message %q does not name blocker %q", envelope.Error.Message, want)
+				}
+			}
+			if got := procs["qwen38-27b"].(*fakeProcess).stopCalls.Load(); got != 0 {
+				t.Errorf("qwen38-27b.stopCalls=%d want 0 (a refused load must not evict anything)", got)
+			}
+			if got := procs["flash-vllm"].(*fakeProcess).runCalls.Load(); got != 0 {
+				t.Errorf("flash-vllm.runCalls=%d want 0", got)
+			}
+		})
+	}
+}
+
+// TestBaseRouter_MemoryDrainRefusalFramedIntoLoadingStream: a streaming load
+// that queued while a swap was evicting, and still does not fit once that swap
+// lands, is refused at drain time. Its loading stream has already committed a
+// 200, so the refusal must arrive in-band as an SSE error event + [DONE] that
+// names why, not as a bare JSON line an SSE parser would drop.
+func TestBaseRouter_MemoryDrainRefusalFramedIntoLoadingStream(t *testing.T) {
+	sendLoading := true
+	conf := config.Config{
+		HealthCheckTimeout: 5,
+		MemoryPool:         100,
+		Models: map[string]config.ModelConfig{
+			"a": {MemoryCeiling: 60, UnloadTimeout: 1},
+			"b": {MemoryCeiling: 30},
+			"c": {MemoryCeiling: 80, SendLoadingState: &sendLoading},
+		},
+	}
+	a := newFakeProcess("a")
+	a.markReady()
+	a.stopBlock = make(chan struct{}) // hold b's eviction of a in flight
+	pb := newFakeProcess("b")
+	pb.autoReady = true
+	pc := newFakeProcess("c")
+	pc.autoReady = true
+	b := newTestBaseWithConfig(t, conf, map[string]process.Process{"a": a, "b": pb, "c": pc}, &stubPlanner{
+		evict: map[string][]string{"b": {"a"}},
+	})
+
+	wb := httptest.NewRecorder()
+	bDone := make(chan struct{})
+	go func() {
+		b.ServeHTTP(wb, newRequest("b"))
+		close(bDone)
+	}()
+	waitProcessed(t, b.testProcessed, 1)
+	waitSignal(t, a.stopStarted, "eviction of a")
+
+	wc := httptest.NewRecorder()
+	cDone := make(chan struct{})
+	go func() {
+		b.ServeHTTP(wc, newStreamRequest("c"))
+		close(cDone)
+	}()
+	waitProcessed(t, b.testProcessed, 1) // c admitted and queued behind b's swap
+
+	close(a.stopBlock)
+	waitSignal(t, bDone, "b request")
+	waitSignal(t, cDone, "c request")
+
+	if wb.Code != http.StatusOK {
+		t.Fatalf("b status=%d want 200 body=%q", wb.Code, wb.Body.String())
+	}
+	body := wc.Body.String()
+	if content := extractStreamedContent(body); !strings.Contains(content, "llama-swap loading model") {
+		t.Fatalf("loading stream did not start, so this is not the path under test: %q", body)
+	}
+	for _, line := range strings.Split(strings.TrimRight(body, "\n"), "\n") {
+		if line != "" && !strings.HasPrefix(line, "data: ") {
+			t.Errorf("line %q is not an SSE field; a client would silently ignore it", line)
+		}
+	}
+	for _, want := range []string{"memory admission refused", `\"c\" needs 80 bytes`, "b=30"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("stream missing %q: %q", want, body)
+		}
+	}
+	if !strings.HasSuffix(strings.TrimRight(body, "\n"), "data: [DONE]") {
+		t.Errorf("stream not terminated with [DONE]: %q", body)
+	}
+	if got := pc.runCalls.Load(); got != 0 {
+		t.Errorf("c.runCalls=%d want 0", got)
+	}
+}

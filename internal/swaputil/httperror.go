@@ -160,7 +160,16 @@ type MemoryAdmissionError struct {
 	Message string
 }
 
-func (e MemoryAdmissionError) Error() string { return "memory admission refused" }
+// Error includes Message because a refusal that reaches a streaming caller
+// after its loading stream committed a 200 is framed from Error() (the router's
+// loadingWriter.sendError), not from Body(); without it that caller would learn
+// only that it was refused, not why.
+func (e MemoryAdmissionError) Error() string {
+	if e.Message != "" {
+		return "memory admission refused: " + e.Message
+	}
+	return "memory admission refused"
+}
 
 func (e MemoryAdmissionError) StatusCode() int { return http.StatusServiceUnavailable }
 
