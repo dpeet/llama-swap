@@ -457,7 +457,11 @@ func adoptEligibleModels(models map[string]config.ModelConfig, handles func(stri
 // Called explicitly for the INITIAL server only (from llama-swap.go), never
 // from New — a hot reload builds a new server before shutting the old one down,
 // so adopting there would attach to containers the old server is about to
-// cmdStop, then cold-boot them. The probe+attach runs in a background goroutine.
+// cmdStop, then cold-boot them. That reason holds only for models the old
+// server stops: a detachOnShutdown model's container is left running across
+// the reload, and since nothing adopts it the new server reports it Stopped
+// (and uncounted by memory admission) until a request re-attaches it. The
+// probe+attach runs in a background goroutine.
 func (s *Server) StartAdopt() {
 	if !s.cfg.Hooks.OnStartup.Adopt {
 		return

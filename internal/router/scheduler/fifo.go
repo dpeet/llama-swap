@@ -438,9 +438,11 @@ func (s *FIFO) limit(modelID string) int {
 // planned evict set is stopped. pool == 0 disables the gate (feature off). A
 // target with no configured ceiling can't be sized, so it never fits (the caller
 // treats that as a hard refuse via neverFits). running is the pre-swap resident +
-// in-flight set and excludes target. A RESIDENT model with no ceiling is a config
-// error: counted as 0 (best-effort) rather than deadlocking the queue — the
-// shipped earlyoom + fail-closed compose gate backstop an actual OOM.
+// in-flight set. It includes target whenever target's process is not stopped
+// (Starting, Ready, Stopping); the loop skips it so target is counted once, as
+// needed. A RESIDENT model with no ceiling is a config error: counted as 0
+// (best-effort) rather than deadlocking the queue — the shipped earlyoom +
+// fail-closed compose gate backstop an actual OOM.
 func (s *FIFO) fits(target string, evict, running []string) bool {
 	if s.pool == 0 {
 		return true
@@ -560,7 +562,11 @@ func (s *FIFO) enqueue(req HandlerReq) {
 // drainQueue walks the queued requests in order, re-running the OnRequest
 // decision tree against the (now smaller) active set. Items that can now start
 // or join become satisfied; items still blocked remain queued in original order
-// so they get another chance on the next swap completion.
+// and are retried the next time drainQueue runs. That is only on OnSwapDone,
+// on OnServeDone when a model's in-flight count reaches zero, and on OnUnload:
+// a process that stops on its own (TTL expiry, upstream crash) sends the
+// scheduler no event, so the memory it frees goes unnoticed until one of those
+// fires.
 func (s *FIFO) drainQueue() {
 	if len(s.queued) == 0 {
 		return
@@ -587,7 +593,8 @@ func (s *FIFO) drainQueue() {
 		}
 		// Memory admission for a queued load: a never-fits request is dropped
 		// with an error (grantError releases its reservation); a transient
-		// over-budget stays queued to retry on the next residency release.
+		// over-budget stays queued for the next drainQueue (see its doc for
+		// which events trigger one).
 		if !isAdopt(req) && !s.fits(req.Model, evict, running) {
 			if s.neverFits(req.Model) {
 				s.logger.Debugf("%s: dropping queued model %s (never fits memory budget)", s.name, req.Model)
