@@ -182,6 +182,18 @@
             "default": 0,
             "description": "Caps the number of inference requests served at once across all models combined, using a single shared semaphore rather than a per-model limit. 0 means no limit. Requests exceeding the limit receive an HTTP 429 Too Many Requests response immediately rather than being queued."
         },
+        "memoryPool": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "Usable memory budget in bytes for memory admission. A new model load is admitted only when the memoryCeiling of every resident model plus the new model's memoryCeiling fits within memoryPool minus memoryReserve; otherwise it waits for memory to free, or is refused with HTTP 503 if it can never fit or has no memoryCeiling. Not auto-detected. 0 disables memory admission."
+        },
+        "memoryReserve": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "Headroom in bytes kept free below memoryPool. Must be less than memoryPool when memoryPool is set. Ignored when memoryPool is 0."
+        },
         "logLevel": {
             "type": "string",
             "enum": [
@@ -546,6 +558,12 @@
                         "minimum": 0,
                         "default": 0,
                         "description": "Overrides allowed number of active parallel requests to a model. 0 uses internal default of 10. >0 overrides default. Requests exceeding limit get HTTP 429."
+                    },
+                    "memoryCeiling": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "default": 0,
+                        "description": "The model's hard resident memory footprint in bytes (weights, peak KV cache/context, fragmentation and startup transient), used by memory admission. 0 means unset: when memoryPool is set, a new load of a model without a memoryCeiling is refused with HTTP 503 because it can't be sized. Only used when memoryPool > 0."
                     },
                     "sendLoadingState": {
                         "type": "boolean",
