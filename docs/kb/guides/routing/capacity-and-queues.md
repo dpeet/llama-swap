@@ -3,7 +3,7 @@ title: Routing capacity and request queues
 summary: Configure concurrencyLimit, globalConcurrencyLimit and memory admission, and understand queued work while a model is loading or busy.
 category: guides
 tags: [routing, queue, capacity, concurrency, concurrency-limit, max-concurrent-requests, global-concurrency-limit, rate-limit, memory, memory-admission, unified-memory, oom]
-config_keys: [routing, models.*.concurrencyLimit, globalConcurrencyLimit, memoryPool, memoryReserve, models.*.memoryCeiling]
+config_keys: [routing, models.*.concurrencyLimit, globalConcurrencyLimit, memoryPool, memoryReserve, models.*.memoryCeiling, models.*.runningCheck]
 updated: 2026-09-25
 ---
 
@@ -76,18 +76,22 @@ fits the budget. If it does not:
   loading stream gets the refusal as an SSE error event (the same `memory_admission` error body) followed by
   `data: [DONE]`.
 
-If stopping a model had to force-kill it (its `unloadTimeout` ran out) for a
-swap, an unload or its `ttl`, its
-container may still hold memory although llama-swap shows it stopped. With
-`memoryPool` set, llama-swap keeps counting that model's `memoryCeiling` and
-probes its `proxy` + `checkEndpoint` every 5 seconds; the ceiling is released
-only once nothing answers there (a 5xx still counts as up), or when the model
-is adopted again. Loads that need that memory queue meanwhile rather than fail,
-and so does a request for the force-killed model itself, so it is not started
-against its own container while that is still being torn down.
-The log shows `was force-killed; counting its ... memoryCeiling` and later
-`leaked model ... cleared`. A container that never goes away blocks those loads
-until you stop it by hand.
+If stopping a model had to force-kill it (its `unloadTimeout` ran out) for a swap, an unload or its `ttl`, its container may still hold memory although llama-swap shows it stopped. With `memoryPool` set, llama-swap keeps counting that model's `memoryCeiling` until it knows the container is gone:
+
+- With `runningCheck` set, it runs that command every 5 seconds: exit 0 means still running, and the first non-zero exit releases the ceiling. A run that takes over 10 seconds is killed and counts as still running.
+- Otherwise it probes the model's `proxy` + `checkEndpoint` every 5 seconds and releases the ceiling once nothing answers there (a 5xx still counts as up), but only if this run of the model had passed its health check. A model killed while still loading never opened its port, so a refused connection proves nothing; its ceiling stays counted until you unload it (below). With `checkEndpoint: none` nothing is ever probed, so use `runningCheck`.
+- Starting or adopting the model again also releases it.
+
+```yaml
+models:
+  big-llm:
+    cmdStop: docker compose -f /srv/big-llm/compose.yaml down
+    runningCheck: sh -c 'out=$(docker inspect -f "{{.State.Running}}" big-llm 2>&1) || case "$out" in *[Nn]"o such object"*|*[Nn]"o such container"*) exit 1;; *) exit 0;; esac; [ "$out" = true ]'
+```
+
+This check exits non-zero only when the container is stopped or removed. The shorter `[ "$(docker inspect ...)" = true ]` would also exit non-zero when the docker daemon cannot be reached, releasing the ceiling while the container may still hold memory; the `case` above treats that as still running instead.
+
+While the leak can still clear by itself, loads that need that memory queue rather than fail, and so does a request for the force-killed model itself, so it is not started against its own container while that is still being torn down. A leak that cannot (killed while loading, no `runningCheck`) gets them an immediate 503 naming it, e.g. `a=60 (leaked: force-killed, still running?) - unload a to release`. Unloading it (`curl -X POST http://localhost:8080/api/models/unload/a`) runs its `cmdStop` again and releases the ceiling if that exits 0 within `unloadTimeout`. If `cmdStop` is unset or uses `${PID}` there is nothing to re-run: stop the upstream by hand and restart llama-swap. The log shows `was force-killed; counting its ... memoryCeiling` and later `leaked model ... cleared (<reason>)`.
 
 Unloading a model while it is still loading (the UI's "Cancel load") cancels
 that load: the model is not started once the models it was evicting have

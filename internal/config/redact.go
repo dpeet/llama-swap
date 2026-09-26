@@ -199,7 +199,7 @@ func redactString(key, s string) string {
 		return "tailcat://" + RedactedPlaceholder
 	}
 	switch strings.ToLower(key) {
-	case "cmd", "cmdstop":
+	case "cmd", "cmdstop", "runningcheck":
 		for _, re := range cmdSecretPatterns {
 			s = re.ReplaceAllString(s, "${1}"+RedactedPlaceholder)
 		}

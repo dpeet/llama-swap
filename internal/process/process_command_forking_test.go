@@ -7,10 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -584,6 +588,11 @@ func TestProcessCommand_StopDuringStartupSurfacesForcedKill(t *testing.T) {
 	if got := p.State(); got != StateStopped {
 		t.Errorf("after Stop: state=%s want %s", got, StateStopped)
 	}
+	// Killed before its health check ever passed: the router must not read a
+	// refused port as "gone" for this run.
+	if p.UpstreamSeenHealthy() {
+		t.Error("UpstreamSeenHealthy=true for a run aborted before its health check passed")
+	}
 	select {
 	case <-runErr:
 	case <-time.After(testReturnTimeout):
@@ -706,4 +715,71 @@ func TestProcessCommand_UpstreamExitReportsSelfStop(t *testing.T) {
 		t.Errorf("state=%s want %s", got, StateStopped)
 	}
 	<-runErr
+}
+
+// TestProcessCommand_UpstreamSeenHealthy: a run whose health check passed is
+// remembered as seen healthy after it stops, and a new start resets that.
+func TestProcessCommand_UpstreamSeenHealthy(t *testing.T) {
+	var unhealthy atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if unhealthy.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer srv.Close()
+	p := newProcessCommand(t, config.ModelConfig{
+		Cmd:           "sleep 30",
+		Proxy:         srv.URL,
+		CheckEndpoint: "/health",
+		UnloadTimeout: 1,
+	})
+	if p.UpstreamSeenHealthy() {
+		t.Fatal("seen healthy before any start")
+	}
+	if err := p.EnsureReady(context.Background(), 5*time.Second); err != nil {
+		t.Fatalf("EnsureReady: %v", err)
+	}
+	if err := p.Stop(2 * time.Second); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if !p.UpstreamSeenHealthy() {
+		t.Fatal("UpstreamSeenHealthy=false after a run that passed its health check")
+	}
+
+	unhealthy.Store(true) // the next run never becomes healthy
+	runErr := make(chan error, 1)
+	go func() { runErr <- p.Run(30 * time.Second) }()
+	waitForState(t, p, StateStarting)
+	if p.UpstreamSeenHealthy() {
+		t.Error("UpstreamSeenHealthy not reset when a new start began")
+	}
+	_ = p.Stop(2 * time.Second)
+	<-runErr
+}
+
+// TestProcess_RunBoundedCommand pins the exit-status contract runningCheck relies on,
+// and that a timeout kills the command's whole process group.
+func TestProcess_RunBoundedCommand(t *testing.T) {
+	ctx := context.Background()
+	if err := RunBoundedCommand(ctx, []string{"sh", "-c", "exit 0"}, nil, io.Discard, time.Second); err != nil {
+		t.Errorf("exit 0: err=%v want nil", err)
+	}
+	var exitErr *exec.ExitError
+	if err := RunBoundedCommand(ctx, []string{"sh", "-c", "exit 3"}, nil, io.Discard, time.Second); !errors.As(err, &exitErr) || exitErr.ExitCode() != 3 {
+		t.Errorf("exit 3: err=%v want an ExitError with code 3", err)
+	}
+
+	marker := filepath.Join(t.TempDir(), "finished")
+	start := time.Now()
+	err := RunBoundedCommand(ctx, []string{"sh", "-c", fmt.Sprintf("sleep 0.5 && touch %s", marker)}, nil, io.Discard, 50*time.Millisecond)
+	if !errors.Is(err, ErrCommandTimedOut) {
+		t.Fatalf("timeout: err=%v want ErrCommandTimedOut", err)
+	}
+	if elapsed := time.Since(start); elapsed > 400*time.Millisecond {
+		t.Errorf("timeout took %v, want about 50ms", elapsed)
+	}
+	time.Sleep(700 * time.Millisecond)
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("the timed-out command's child kept running: process group not killed")
+	}
 }
