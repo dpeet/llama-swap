@@ -545,10 +545,13 @@ func buildMetrics(modelID string, start time.Time, inputTokens, outputTokens, ca
 	// llama.cpp `timings`, no vLLM `metrics` object — so tokensPerSecond stays -1
 	// and the /ui speed column reads "unknown". Fall back to the end-to-end
 	// effective generation rate from the token count and wall duration already
-	// recorded. This includes prefill + queue time, so it is lower than
-	// pure-decode ITL — honest and directional, not a decode benchmark. Prompt
-	// rate is left unknown because a usage-only response carries no
-	// prefill-vs-decode split to derive it from.
+	// recorded. The duration starts when the metrics middleware wraps the
+	// writer, before next.ServeHTTP, so it includes prefill, upstream queueing,
+	// llama-swap's own scheduler queueing and any model load (a cold start can
+	// dominate it). The rate is therefore lower than pure-decode ITL —
+	// directional, not a decode benchmark. Prompt rate is left unknown because
+	// a usage-only response carries no prefill-vs-decode split to derive it
+	// from.
 	if tokensPerSecond < 0 && outputTokens > 0 && durationMs > 0 {
 		tokensPerSecond = float64(outputTokens) / (float64(durationMs) / 1000)
 	}
