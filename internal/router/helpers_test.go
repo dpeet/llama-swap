@@ -100,6 +100,9 @@ type fakeProcess struct {
 	// "swap mid-request" anti-property.
 	inFlightServe       atomic.Int32
 	stoppedWhileServing atomic.Bool
+
+	// selfStopFn is the router's OnSelfStop callback; selfStop invokes it.
+	selfStopFn func(error)
 }
 
 func newFakeProcess(id string) *fakeProcess {
@@ -315,6 +318,30 @@ func (f *fakeProcess) WaitReady(ctx context.Context) error {
 }
 
 func (f *fakeProcess) Logger() *logmon.Monitor { return logmon.NewWriter(io.Discard) }
+
+func (f *fakeProcess) OnSelfStop(fn func(error)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.selfStopFn = fn
+}
+
+// selfStop models ProcessCommand stopping on its own (a TTL unload finishing,
+// or the upstream exiting): the process ends Stopped and the OnSelfStop
+// callback receives err (process.ErrForcedKill for a forced TTL stop).
+func (f *fakeProcess) selfStop(err error) {
+	f.mu.Lock()
+	f.setStateLocked(process.StateStopped)
+	select {
+	case <-f.stopCh:
+	default:
+		close(f.stopCh)
+	}
+	fn := f.selfStopFn
+	f.mu.Unlock()
+	if fn != nil {
+		fn(err)
+	}
+}
 
 func (f *fakeProcess) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	f.serveCalls.Add(1)

@@ -78,4 +78,13 @@ type Process interface {
 
 	// Logger returns the monitor that captures this process's stdout/stderr.
 	Logger() *logmon.Monitor
+
+	// OnSelfStop registers fn to be told whenever the process stops without its
+	// owner calling Stop or Detach: a TTL unload (err is that stop's result,
+	// ErrForcedKill when it had to force-kill) or an unexpected upstream exit
+	// (err nil). The owner needs this because its own bookkeeping (the router's
+	// queue and memory ledger) otherwise never learns of the stop. fn runs on
+	// the process's own goroutines, so it must return promptly and must not
+	// call back into the process. A later call replaces fn.
+	OnSelfStop(fn func(err error))
 }
