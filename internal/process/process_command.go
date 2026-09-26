@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -165,6 +166,10 @@ type ProcessCommand struct {
 
 	// selfStop is the OnSelfStop callback; nil until one is registered.
 	selfStop atomic.Pointer[func(error)]
+
+	// seenHealthy backs UpstreamSeenHealthy: cleared by run() when a start
+	// begins, set by doStart when the health check gets its 200.
+	seenHealthy atomic.Bool
 }
 
 var _ Process = (*ProcessCommand)(nil)
@@ -342,6 +347,7 @@ func (p *ProcessCommand) run() {
 				continue
 			}
 			setState(StateStarting)
+			p.seenHealthy.Store(false) // a new run; doStart sets it once the health check passes
 
 			p.pendingDetach.Store(false) // reset; a stop handler sets it if it aborts this start
 			p.pendingStopTimeout.Store(0)
@@ -654,6 +660,9 @@ func (p *ProcessCommand) doStart(startCtx context.Context, healthCheckTimeout ti
 		resp.Body.Close()
 		if resp.StatusCode == http.StatusOK {
 			p.proxyLogger.Infof("<%s> Health check passed on %s%s", p.id, p.config.Proxy, p.config.CheckEndpoint)
+			// Set even if a stop aborts the start right after this: the upstream
+			// has opened its port, which is all UpstreamSeenHealthy claims.
+			p.seenHealthy.Store(true)
 			break
 		} else if startCtx.Err() != nil {
 			return abort(ErrStartAborted)
@@ -822,6 +831,65 @@ func (p *ProcessCommand) reportSelfStop(err error) {
 	if fn := p.selfStop.Load(); fn != nil && *fn != nil {
 		(*fn)(err)
 	}
+}
+
+// UpstreamSeenHealthy implements Process.
+func (p *ProcessCommand) UpstreamSeenHealthy() bool {
+	return p.seenHealthy.Load()
+}
+
+// ErrCommandTimedOut is returned by RunBoundedCommand when the command outlived
+// its timeout and its process group was SIGKILLed.
+var ErrCommandTimedOut = errors.New("command timed out; process group killed")
+
+// boundedCommandWaitDelay bounds how long RunBoundedCommand waits for the
+// command's output pipes after it exits (a backgrounded grandchild can hold
+// them open). 1s because these commands are short checks whose exit status is
+// the whole answer; their output is diagnostics only.
+const boundedCommandWaitDelay = time.Second
+
+// RunBoundedCommand runs args (already sanitized, see config.SanitizeCommand)
+// with env in its own process group, writing its output to out, and returns
+// cmd.Wait's error: nil for exit status 0, an *exec.ExitError for a non-zero
+// exit. If the command is still running after timeout (or ctx ends first), the
+// whole group is SIGKILLed and ErrCommandTimedOut (or ctx.Err()) is returned,
+// so a hung helper (a `docker` CLI waiting on a busy daemon) can never block
+// its caller. Any other error means the command could not be started.
+func RunBoundedCommand(ctx context.Context, args, env []string, out io.Writer, timeout time.Duration) error {
+	if len(args) == 0 {
+		return errors.New("empty command")
+	}
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Env = env
+	cmd.Stdout = out
+	cmd.Stderr = out
+	cmd.WaitDelay = boundedCommandWaitDelay
+	setProcAttributes(cmd)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	var cutErr error
+	select {
+	case err := <-done:
+		// ErrWaitDelay is only returned after a zero exit: a child held the
+		// output open, which does not change the command's answer.
+		if errors.Is(err, exec.ErrWaitDelay) {
+			return nil
+		}
+		return err
+	case <-timer.C:
+		cutErr = ErrCommandTimedOut
+	case <-ctx.Done():
+		cutErr = ctx.Err()
+	}
+	_ = killProcessTree(cmd)
+	<-done
+	return cutErr
 }
 
 func (p *ProcessCommand) ID() string {

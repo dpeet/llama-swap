@@ -87,4 +87,14 @@ type Process interface {
 	// the process's own goroutines, so it must return promptly and must not
 	// call back into the process. A later call replaces fn.
 	OnSelfStop(fn func(err error))
+
+	// UpstreamSeenHealthy reports whether the upstream of the current or most
+	// recent run ever answered its checkEndpoint with a 200 (the start's
+	// health check passed, which is also how an adopt attaches). It is reset
+	// when a new start begins and kept after a stop. False for a run aborted
+	// while still loading and for checkEndpoint "none", where nothing was
+	// probed. The router uses it to decide whether a refused connection on the
+	// model's port after a forced kill means the upstream is gone, or only that
+	// it never opened the port.
+	UpstreamSeenHealthy() bool
 }

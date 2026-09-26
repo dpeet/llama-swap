@@ -146,6 +146,13 @@ type ModelConfig struct {
 	// (it can't be sized). Only consulted when Config.MemoryPool > 0.
 	MemoryCeiling int64 `yaml:"memoryCeiling"`
 
+	// RunningCheck is an optional command (parsed like CmdStop, without
+	// ${PID}) that answers "does this model still hold its resources?" by exit
+	// status: 0 = still running, non-zero = gone. After a forced kill, the
+	// router runs it instead of probing the proxy to decide when the model's
+	// memoryCeiling stops counting. Only used when Config.MemoryPool > 0.
+	RunningCheck string `yaml:"runningCheck"`
+
 	// Model filters see issue #174
 	Filters ModelFilters `yaml:"filters"`
 

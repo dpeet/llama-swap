@@ -565,6 +565,11 @@
                         "default": 0,
                         "description": "The model's hard resident memory footprint in bytes (weights, peak KV cache/context, fragmentation and startup transient), used by memory admission. 0 means unset: when memoryPool is set, a new load of a model without a memoryCeiling is refused with HTTP 503 because it can't be sized. Only used when memoryPool > 0."
                     },
+                    "runningCheck": {
+                        "type": "string",
+                        "default": "",
+                        "description": "Optional command that reports by exit status whether the model's upstream still holds its resources: 0 = still running, non-zero = gone. Parsed and macro-expanded like cmdStop, without ${PID}. When a stop had to force-kill the model, llama-swap runs it every 5 seconds (10s timeout; a timeout counts as still running) instead of probing proxy + checkEndpoint, and stops counting the model's memoryCeiling at the first non-zero exit. Only used when memoryPool > 0."
+                    },
                     "sendLoadingState": {
                         "type": "boolean",
                         "description": "Overrides the global sendLoadingState for this model. Ommitting this property will use the global setting."

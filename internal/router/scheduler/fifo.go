@@ -64,8 +64,11 @@ type FIFO struct {
 	// leaked holds models whose stop force-killed (process.ErrForcedKill): the
 	// process reports stopped but its upstream may still hold memory, so fits
 	// keeps charging their ceilings until the leak watcher reports the upstream
-	// gone (OnLeakGone) or the model is started again (OnSwapDone).
-	leaked map[string]struct{}
+	// gone (OnLeakGone), the model is started again (OnSwapDone), or an unload
+	// re-runs its cmdStop successfully (OnUnload). The value is whether a
+	// watcher is running (Effects.WatchLeak): only such a leak can clear on its
+	// own, so only it counts as pending (memoryPending).
+	leaked map[string]bool
 }
 
 // NewFIFO builds a FIFO scheduler. Per-model concurrency limits and memory
@@ -112,7 +115,7 @@ func NewFIFO(name string, logger *logmon.Monitor, planner Swapper, cfg config.Fi
 		active:   make(map[string]*activeSwap),
 		reserved: make(map[string]int),
 		inFlight: make(map[string]int),
-		leaked:   make(map[string]struct{}),
+		leaked:   make(map[string]bool),
 	}
 }
 
@@ -407,6 +410,24 @@ func (s *FIFO) OnUnload(targets []string, timeout time.Duration) {
 		s.queued = kept
 	}
 
+	// A leaked target that already reads Stopped (and no swap owns) has no
+	// process left for Stop to act on, so Stop would be a no-op and the leak
+	// could only wait for its watcher. The owner unloading it is the explicit
+	// "release it" signal, so its cmdStop runs again below (after the Stop
+	// pass, which leaves such a process untouched).
+	var rerun []string
+	for _, id := range targets {
+		if _, leaked := s.leaked[id]; !leaked {
+			continue
+		}
+		if _, inSwap := s.active[id]; inSwap {
+			continue
+		}
+		if st, _ := s.effects.ModelState(id); st == process.StateStopped {
+			rerun = append(rerun, id)
+		}
+	}
+
 	// Stop the targeted processes. Done synchronously so Unload's caller can
 	// rely on "after Unload returns, the process is stopped". inFlight is
 	// intentionally NOT cleared here: each dying handler will fire its tracked
@@ -414,18 +435,24 @@ func (s *FIFO) OnUnload(targets []string, timeout time.Duration) {
 	// is recorded as a leak so its memory is not credited as freed.
 	s.recordLeaks(s.effects.StopProcesses(timeout, targets))
 
+	if len(rerun) > 0 {
+		for _, id := range s.effects.RerunStop(timeout, rerun) {
+			s.clearLeak(id, "unloaded and its cmdStop completed")
+		}
+	}
+
 	// Stopping the targets and dropping their queued requests may have
 	// unblocked queued requests for other models.
 	s.drainQueue()
 }
 
-// OnLeakGone clears a leak once the watcher saw its upstream stop answering,
-// then drains the queue: loads waiting on that memory may now fit.
-func (s *FIFO) OnLeakGone(modelID string) {
+// OnLeakGone clears a leak once the watcher saw its upstream gone, then drains
+// the queue: loads waiting on that memory may now fit.
+func (s *FIFO) OnLeakGone(modelID, reason string) {
 	if _, ok := s.leaked[modelID]; !ok {
 		return
 	}
-	s.clearLeak(modelID, "upstream stopped answering")
+	s.clearLeak(modelID, reason)
 	s.drainQueue()
 }
 
@@ -454,9 +481,13 @@ func (s *FIFO) recordLeaks(ids []string) {
 		return
 	}
 	for _, id := range ids {
-		s.leaked[id] = struct{}{}
-		s.logger.Warnf("%s: %s was force-killed; counting its %d-byte memoryCeiling as resident until its upstream stops answering", s.name, id, s.ceilings[id])
-		s.effects.WatchLeak(id)
+		watching := s.effects.WatchLeak(id)
+		s.leaked[id] = watching
+		if watching {
+			s.logger.Warnf("%s: %s was force-killed; counting its %d-byte memoryCeiling as resident until its upstream is gone", s.name, id, s.ceilings[id])
+		} else {
+			s.logger.Warnf("%s: %s was force-killed and nothing can tell when its upstream is gone; counting its %d-byte memoryCeiling as resident until it is unloaded (cmdStop completes) or started again", s.name, id, s.ceilings[id])
+		}
 	}
 }
 
@@ -590,7 +621,8 @@ func (s *FIFO) fits(target string, evict, running []string) bool {
 	// A target that is itself leaked waits for its leak to clear, whatever the
 	// budget says: starting it now would run its start command (`compose up -d`)
 	// against its own force-killed container while that is still being torn
-	// down. The leak counts as pending, so the request queues until OnLeakGone.
+	// down. A watched leak counts as pending, so the request queues until
+	// OnLeakGone; an unwatched one is refused, naming the model to unload.
 	if _, ok := s.leaked[target]; ok {
 		return false
 	}
@@ -657,12 +689,12 @@ func (s *FIFO) memoryCharged(target string, evict, running []string) []string {
 func (s *FIFO) memoryHolders(target string, evict, running []string) string {
 	var holders []string
 	if _, ok := s.leaked[target]; ok {
-		holders = append(holders, fmt.Sprintf("%s=%d (itself force-killed, may still hold memory)", target, s.ceilings[target]))
+		holders = append(holders, fmt.Sprintf("%s=%d (itself %s)", target, s.ceilings[target], s.leakNote(target)))
 	}
 	for _, id := range s.memoryCharged(target, evict, running) {
 		h := fmt.Sprintf("%s=%d", id, s.ceilings[id])
 		if _, ok := s.leaked[id]; ok {
-			h += " (force-killed, may still hold memory)"
+			h += " (" + s.leakNote(id) + ")"
 		}
 		holders = append(holders, h)
 	}
@@ -672,19 +704,36 @@ func (s *FIFO) memoryHolders(target string, evict, running []string) string {
 	return strings.Join(holders, ", ")
 }
 
+// leakNote describes a leaked model for memoryHolders. An unwatched leak says
+// it will not clear by itself, because only an unload (or a start) releases it.
+func (s *FIFO) leakNote(id string) string {
+	if s.leaked[id] {
+		return "force-killed, may still hold memory"
+	}
+	return "leaked: force-killed, still running?"
+}
+
 // memoryPending reports whether anything already in motion could still free
 // memory for a load that does not fit now: an in-flight swap (its evictions are
 // underway, and a failed start releases its target's share), a model in
-// StateStopping (a stop that has not finished), or a leaked model (its upstream
-// is being watched). Only then is it worth queuing an over-budget load, because
-// each ends in an event that runs drainQueue again (OnSwapDone, OnUnload or
-// OnSelfStop for a TTL stop, OnLeakGone).
+// StateStopping (a stop that has not finished), or a watched leaked model (its
+// upstream is being watched). Only then is it worth queuing an over-budget
+// load, because each ends in an event that runs drainQueue again (OnSwapDone,
+// OnUnload or OnSelfStop for a TTL stop, OnLeakGone). An unwatched leak is not
+// pending: nothing would ever report it gone, so a load waiting on it would
+// queue until its client gave up; it is refused instead, naming the model to
+// unload (memoryBlockedMessage).
 // The rule is deliberately coarse (it does not ask whether the pending work
 // would free enough): drainQueue re-checks and refuses once nothing is pending,
 // so the cost of a false "pending" is a bounded wait, not a stranded request.
 func (s *FIFO) memoryPending() bool {
-	if len(s.active) > 0 || len(s.leaked) > 0 {
+	if len(s.active) > 0 {
 		return true
+	}
+	for _, watching := range s.leaked {
+		if watching {
+			return true
+		}
 	}
 	for _, st := range s.effects.RunningModels() {
 		if st == process.StateStopping {
@@ -695,10 +744,25 @@ func (s *FIFO) memoryPending() bool {
 }
 
 // memoryBlockedMessage builds the client-facing 503 message for a load that
-// does not fit now and has nothing pending that could free memory for it.
+// does not fit now and has nothing pending that could free memory for it. When
+// an unwatched leak is among the holders (or is the target itself), it tells
+// the user to unload that model, because nothing else will release it.
 func (s *FIFO) memoryBlockedMessage(target string, evict, running []string) string {
-	return fmt.Sprintf("model %q needs %d bytes but the budget of %d (pool %d - reserve %d) is held by models that will not be evicted for it: %s",
+	msg := fmt.Sprintf("model %q needs %d bytes but the budget of %d (pool %d - reserve %d) is held by models that will not be evicted for it: %s",
 		target, s.ceilings[target], s.pool-s.reserve, s.pool, s.reserve, s.memoryHolders(target, evict, running))
+	var stuck []string
+	if watching, ok := s.leaked[target]; ok && !watching {
+		stuck = append(stuck, target)
+	}
+	for _, id := range s.memoryCharged(target, evict, running) {
+		if watching, ok := s.leaked[id]; ok && !watching {
+			stuck = append(stuck, id)
+		}
+	}
+	if len(stuck) > 0 {
+		msg += fmt.Sprintf(" - unload %s to release", strings.Join(stuck, ", "))
+	}
+	return msg
 }
 
 // isAdopt reports whether req is an adoption attach (StartAdopt sets the "adopt"

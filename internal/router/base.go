@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"sync"
@@ -30,12 +33,13 @@ type unloadReq struct {
 	respond chan struct{}
 }
 
-// leakGone is sent by a leak watcher when a force-killed model's upstream stops
-// answering. gen identifies the watch that saw it, so a report from a watch
-// that was replaced or cancelled in the meantime is dropped.
+// leakGone is sent by a leak watcher when a force-killed model's upstream is
+// gone. gen identifies the watch that saw it, so a report from a watch that was
+// replaced or cancelled in the meantime is dropped. reason is for the log.
 type leakGone struct {
 	modelID string
 	gen     uint64
+	reason  string
 }
 
 // selfStop is a process reporting a stop the router did not ask for (a TTL
@@ -59,9 +63,16 @@ type leakWatch struct {
 // per-probe timeout is 2s because the probe is a loopback GET that a live
 // server answers in milliseconds; a probe that times out is treated as "still
 // there" (see upstreamGone), so a short timeout only costs one more attempt.
+//
+// A runningCheck run gets 10s because it is typically a `docker inspect`, which
+// can take seconds against a daemon busy tearing the very container down; a
+// run that times out also counts as "still running" (see runningCheckGone), so
+// a generous bound only delays the clear, while a tight one could never clear
+// on a slow daemon.
 const (
-	defaultLeakProbeInterval = 5 * time.Second
-	defaultLeakProbeTimeout  = 2 * time.Second
+	defaultLeakProbeInterval   = 5 * time.Second
+	defaultLeakProbeTimeout    = 2 * time.Second
+	defaultRunningCheckTimeout = 10 * time.Second
 )
 
 // baseRouter owns the channels, run-loop, and process machinery shared by every
@@ -103,10 +114,11 @@ type baseRouter struct {
 	// are only called from the scheduler, which runs on it. The probe interval
 	// and timeout are read there too; tests shorten them before the first
 	// request.
-	leakWatches       map[string]leakWatch
-	leakGen           uint64
-	leakProbeInterval time.Duration
-	leakProbeTimeout  time.Duration
+	leakWatches         map[string]leakWatch
+	leakGen             uint64
+	leakProbeInterval   time.Duration
+	leakProbeTimeout    time.Duration
+	runningCheckTimeout time.Duration
 
 	runDone chan struct{}
 
@@ -146,9 +158,10 @@ func newBaseRouter(
 		selfStopCh:  make(chan selfStop),
 		runDone:     make(chan struct{}),
 
-		leakWatches:       make(map[string]leakWatch),
-		leakProbeInterval: defaultLeakProbeInterval,
-		leakProbeTimeout:  defaultLeakProbeTimeout,
+		leakWatches:         make(map[string]leakWatch),
+		leakProbeInterval:   defaultLeakProbeInterval,
+		leakProbeTimeout:    defaultLeakProbeTimeout,
+		runningCheckTimeout: defaultRunningCheckTimeout,
 	}
 	sched, err := scheduler.New(conf, name, logger, planner, b)
 	if err != nil {
@@ -217,7 +230,7 @@ func (b *baseRouter) run() {
 			if w, ok := b.leakWatches[ev.modelID]; ok && w.gen == ev.gen {
 				w.cancel()
 				delete(b.leakWatches, ev.modelID)
-				b.schedule.OnLeakGone(ev.modelID)
+				b.schedule.OnLeakGone(ev.modelID, ev.reason)
 			}
 		}
 	}
@@ -309,23 +322,105 @@ func (b *baseRouter) StopProcesses(timeout time.Duration, ids []string) []string
 	return forced
 }
 
-// WatchLeak implements scheduler.Effects. It probes the model's proxy URL +
-// checkEndpoint every leakProbeInterval and reports leakGone once the upstream
-// stops answering. A model with no proxy cannot be probed; its leak then lasts
-// until it is started again, because clearing it blind could admit a load on
-// top of memory that is still held.
-func (b *baseRouter) WatchLeak(modelID string) {
+// leakProbe runs one check of a leaked model's upstream and reports whether it
+// is gone, with the reason for the log when it is.
+type leakProbe func(ctx context.Context) (gone bool, reason string)
+
+// WatchLeak implements scheduler.Effects. Every leakProbeInterval it runs the
+// model's runningCheck when one is configured (runningCheckGone), else it
+// probes the model's proxy URL + checkEndpoint (upstreamGone), and reports
+// leakGone once the upstream is gone.
+//
+// The HTTP probe is only trusted when this run of the upstream was seen
+// answering its checkEndpoint (process.UpstreamSeenHealthy): a model killed
+// while still loading weights never opened its port, so "connection refused"
+// then says nothing about whether its container still holds memory. Such a
+// leak, like one with no proxy to probe, gets no watch (returns false): it
+// lasts until the model is started again or the owner unloads it, because
+// clearing it blind could admit a load on top of memory that is still held.
+func (b *baseRouter) WatchLeak(modelID string) bool {
 	b.UnwatchLeak(modelID)
-	url := leakProbeURL(b.config.Models[modelID])
-	if url == "" {
-		b.logger.Warnf("%s: cannot watch leaked model %s: no proxy URL to probe", b.name, modelID)
-		return
+	mc := b.config.Models[modelID]
+	var probe leakProbe
+	if strings.TrimSpace(mc.RunningCheck) != "" {
+		args, err := config.SanitizeCommand(mc.RunningCheck)
+		if err != nil { // config load validates it; kept as a guard
+			b.logger.Warnf("%s: cannot watch leaked model %s: invalid runningCheck: %v", b.name, modelID, err)
+			return false
+		}
+		probe = b.runningCheckProbe(modelID, args, mc.Env)
+	} else {
+		url := leakProbeURL(mc)
+		if url == "" {
+			b.logger.Warnf("%s: cannot watch leaked model %s: no proxy URL to probe and no runningCheck", b.name, modelID)
+			return false
+		}
+		if p, ok := b.processes[modelID]; !ok || !p.UpstreamSeenHealthy() {
+			b.logger.Warnf("%s: cannot watch leaked model %s: it was never seen answering %s in this run, so a refused connection would not prove it gone; unload it to release its memory, or configure runningCheck", b.name, modelID, url)
+			return false
+		}
+		client := &http.Client{
+			Timeout: b.leakProbeTimeout,
+			// A fresh connection per probe (no keep-alive, no env proxy): the
+			// question is whether anything is listening on the model's port
+			// right now, and a pooled connection or an HTTP proxy would answer
+			// for it.
+			Transport: &http.Transport{DisableKeepAlives: true},
+		}
+		probe = func(ctx context.Context) (bool, string) {
+			return upstreamGone(ctx, client, url), "upstream no longer answers on " + url
+		}
 	}
 	ctx, cancel := context.WithCancel(b.shutdownCtx)
 	b.leakGen++
 	gen := b.leakGen
 	b.leakWatches[modelID] = leakWatch{gen: gen, cancel: cancel}
-	go b.watchLeak(ctx, modelID, gen, url, b.leakProbeInterval, b.leakProbeTimeout)
+	go b.watchLeak(ctx, modelID, gen, probe, b.leakProbeInterval)
+	return true
+}
+
+// RerunStop implements scheduler.Effects. It runs each model's cmdStop again
+// (the process is already stopped, so Stop would be a no-op), bounded by
+// timeout, in parallel, with the environment the process's commands get. Its
+// output goes to the model's process log, like a normal cmdStop's.
+func (b *baseRouter) RerunStop(timeout time.Duration, ids []string) []string {
+	var wg sync.WaitGroup
+	okAt := make([]bool, len(ids))
+	for i, id := range ids {
+		mc, ok := b.config.Models[id]
+		p, hasProc := b.processes[id]
+		if !ok || !hasProc {
+			continue
+		}
+		stop := strings.TrimSpace(mc.CmdStop)
+		if stop == "" || strings.Contains(stop, "${PID}") {
+			b.logger.Warnf("%s: cannot release leaked model %s: its cmdStop is unset or needs ${PID}, and its process is gone; stop its upstream by hand", b.name, id)
+			continue
+		}
+		args, err := config.SanitizeCommand(stop)
+		if err != nil {
+			b.logger.Warnf("%s: cannot release leaked model %s: invalid cmdStop: %v", b.name, id, err)
+			continue
+		}
+		wg.Add(1)
+		go func(idx int, id string, args []string, env []string, out io.Writer) {
+			defer wg.Done()
+			b.logger.Infof("%s: unload of leaked model %s: running its cmdStop again", b.name, id)
+			if err := process.RunBoundedCommand(b.shutdownCtx, args, env, out, timeout); err != nil {
+				b.logger.Warnf("%s: cmdStop for leaked model %s did not complete: %v; its memoryCeiling stays counted", b.name, id, err)
+				return
+			}
+			okAt[idx] = true
+		}(i, id, args, append(os.Environ(), mc.Env...), p.Logger())
+	}
+	wg.Wait()
+	var done []string
+	for i, ok := range okAt {
+		if ok {
+			done = append(done, ids[i])
+		}
+	}
+	return done
 }
 
 // UnwatchLeak implements scheduler.Effects.
@@ -337,15 +432,9 @@ func (b *baseRouter) UnwatchLeak(modelID string) {
 }
 
 // watchLeak is the probe loop behind WatchLeak. It never touches router state:
-// its only output is the leakGone event, handled on the run loop.
-func (b *baseRouter) watchLeak(ctx context.Context, modelID string, gen uint64, url string, interval, timeout time.Duration) {
-	// A fresh connection per probe (no keep-alive, no env proxy): the question
-	// is whether anything is listening on the model's port right now, and a
-	// pooled connection or an HTTP proxy would answer for it.
-	client := &http.Client{
-		Timeout:   timeout,
-		Transport: &http.Transport{DisableKeepAlives: true},
-	}
+// its only output is the leakGone event, handled on the run loop (whose
+// clearLeak logs the reason).
+func (b *baseRouter) watchLeak(ctx context.Context, modelID string, gen uint64, probe leakProbe, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -354,15 +443,56 @@ func (b *baseRouter) watchLeak(ctx context.Context, modelID string, gen uint64, 
 			return
 		case <-ticker.C:
 		}
-		if !upstreamGone(ctx, client, url) {
+		gone, reason := probe(ctx)
+		if !gone {
 			continue
 		}
-		b.logger.Infof("%s: leaked model %s no longer answers on %s", b.name, modelID, url)
 		select {
-		case b.leakGoneCh <- leakGone{modelID: modelID, gen: gen}:
+		case b.leakGoneCh <- leakGone{modelID: modelID, gen: gen, reason: reason}:
 		case <-ctx.Done():
 		}
 		return
+	}
+}
+
+// runningCheckProbe builds the leakProbe for a model's runningCheck command.
+func (b *baseRouter) runningCheckProbe(modelID string, args, env []string) leakProbe {
+	var out io.Writer = io.Discard
+	if p, ok := b.processes[modelID]; ok {
+		out = p.Logger()
+	}
+	env = append(os.Environ(), env...)
+	timeout := b.runningCheckTimeout
+	return func(ctx context.Context) (bool, string) {
+		return runningCheckGone(ctx, b.logger, b.name, modelID, args, env, out, timeout)
+	}
+}
+
+// runningCheckGone runs a leaked model's runningCheck once and reports whether
+// its upstream is gone. Only an exit with a non-zero status counts as gone
+// (the documented contract: 0 = still running). A run that times out (its
+// process group is killed) counts as still running, because a hung check,
+// typically a docker CLI waiting on a busy daemon, cannot prove the container
+// is gone, and a wrong "gone" admits a load on top of memory that is still
+// held while a wrong "running" only costs another interval. A check that
+// cannot be started at all (binary missing) is also treated as still running,
+// with a warning, for the same reason.
+func runningCheckGone(ctx context.Context, logger *logmon.Monitor, name, modelID string, args, env []string, out io.Writer, timeout time.Duration) (bool, string) {
+	err := process.RunBoundedCommand(ctx, args, env, out, timeout)
+	var exitErr *exec.ExitError
+	switch {
+	case err == nil:
+		return false, ""
+	case errors.As(err, &exitErr):
+		return true, fmt.Sprintf("runningCheck exited %d", exitErr.ExitCode())
+	case ctx.Err() != nil:
+		return false, ""
+	case errors.Is(err, process.ErrCommandTimedOut):
+		logger.Debugf("%s: runningCheck for leaked model %s timed out after %v; treating it as still running", name, modelID, timeout)
+		return false, ""
+	default:
+		logger.Warnf("%s: runningCheck for leaked model %s could not run: %v; treating it as still running", name, modelID, err)
+		return false, ""
 	}
 }
 

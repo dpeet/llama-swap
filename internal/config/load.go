@@ -174,6 +174,15 @@ func LoadConfigFromReader(r io.Reader) (Config, error) {
 			return Config{}, fmt.Errorf("model %s: memoryCeiling must be >= 0", modelId)
 		}
 
+		// Parsed here, not first when a leak needs it, so a typo fails the
+		// config load instead of silently disabling the check after a forced
+		// kill. Not required, and harmless without memoryPool (never run then).
+		if strings.TrimSpace(modelConfig.RunningCheck) != "" {
+			if _, err := SanitizeCommand(modelConfig.RunningCheck); err != nil {
+				return Config{}, fmt.Errorf("model %s: invalid runningCheck: %w", modelId, err)
+			}
+		}
+
 		if err := modelConfig.Capabilities.Validate(); err != nil {
 			return Config{}, fmt.Errorf("model %s: %w", modelId, err)
 		}

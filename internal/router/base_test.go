@@ -7,6 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -1333,6 +1336,7 @@ func TestBaseRouter_TTLForcedKillRecordsLeak(t *testing.T) {
 	defer upstream.Close()
 
 	a := newFakeProcess("a")
+	a.markReady() // a TTL stop starts from Ready, so a was seen healthy
 	a.setState(process.StateStopping)
 	pc := newFakeProcess("c")
 	pc.autoReady = true
@@ -1362,5 +1366,177 @@ func TestBaseRouter_TTLForcedKillRecordsLeak(t *testing.T) {
 	waitSignal(t, done, "c request after a's leak cleared")
 	if w.Code != http.StatusOK {
 		t.Fatalf("c status=%d want 200 body=%q", w.Code, w.Body.String())
+	}
+}
+
+// leakCheckConfig: a (60) and c (60) cannot both fit a 100 pool, and the
+// planner does not evict a for c. a's proxy refuses connections, so an HTTP
+// probe of a would call it gone at once: only a's runningCheck, or an unload
+// whose cmdStop completes, may release a leak on it.
+func leakCheckConfig(runningCheck, cmdStop string) config.Config {
+	closed := httptest.NewServer(http.NotFoundHandler())
+	refused := closed.URL
+	closed.Close()
+	return config.Config{
+		HealthCheckTimeout: 5,
+		MemoryPool:         100,
+		Models: map[string]config.ModelConfig{
+			"a": {MemoryCeiling: 60, Proxy: refused, CheckEndpoint: "/health", RunningCheck: runningCheck, CmdStop: cmdStop},
+			"c": {MemoryCeiling: 60},
+		},
+	}
+}
+
+func skipWithoutShell(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh -c commands")
+	}
+}
+
+// leakA force-kills a through an unload so the scheduler records its leak.
+func leakA(t *testing.T, b *baseRouter, a *fakeProcess) {
+	t.Helper()
+	a.forcedKill = true
+	b.Unload(time.Second, "a")
+	if got := a.State(); got != process.StateStopped {
+		t.Fatalf("a state=%q want stopped", got)
+	}
+}
+
+// serveAsync runs one request for model and closes done when it returns.
+func serveAsync(b *baseRouter, r *http.Request) (*httptest.ResponseRecorder, chan struct{}) {
+	w := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		b.ServeHTTP(w, r)
+		close(done)
+	}()
+	return w, done
+}
+
+// TestBaseRouter_RunningCheckDecidesLeak: with runningCheck set, the watcher
+// runs it instead of probing the proxy. Exit 0 keeps the leak (c queues, even
+// though a's port refuses and a was seen healthy, so the HTTP probe would have
+// cleared it); the first non-zero exit clears it and c loads.
+func TestBaseRouter_RunningCheckDecidesLeak(t *testing.T) {
+	skipWithoutShell(t)
+	marker := filepath.Join(t.TempDir(), "running")
+	if err := os.WriteFile(marker, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := newFakeProcess("a")
+	a.markReady()
+	pc := newFakeProcess("c")
+	pc.autoReady = true
+	b := newTestBaseWithConfig(t, leakCheckConfig(fmt.Sprintf("sh -c 'test -e %s'", marker), ""),
+		map[string]process.Process{"a": a, "c": pc}, &stubPlanner{})
+	b.leakProbeInterval = 10 * time.Millisecond
+	leakA(t, b, a)
+	waitProcessed(t, b.testProcessed, 1)
+
+	w, done := serveAsync(b, newRequest("c"))
+	select {
+	case <-done:
+		t.Fatalf("c finished while a's runningCheck exits 0: status=%d body=%q", w.Code, w.Body.String())
+	case <-time.After(300 * time.Millisecond): // many check intervals
+	}
+	if got := pc.runCalls.Load(); got != 0 {
+		t.Fatalf("c.runCalls=%d want 0 while a's leak is live", got)
+	}
+
+	if err := os.Remove(marker); err != nil { // a's container goes away
+		t.Fatal(err)
+	}
+	waitSignal(t, done, "c request after a's runningCheck exited non-zero")
+	if w.Code != http.StatusOK || pc.serveCalls.Load() != 1 {
+		t.Fatalf("c status=%d serveCalls=%d body=%q want 200/1", w.Code, pc.serveCalls.Load(), w.Body.String())
+	}
+}
+
+// TestBaseRouter_RunningCheckTimeoutKeepsLeak: a runningCheck that outlives
+// its timeout counts as "still running", and its whole process group is
+// killed, so the command never gets to finish (the marker is never written).
+func TestBaseRouter_RunningCheckTimeoutKeepsLeak(t *testing.T) {
+	skipWithoutShell(t)
+	marker := filepath.Join(t.TempDir(), "finished")
+	a := newFakeProcess("a")
+	a.markReady()
+	pc := newFakeProcess("c")
+	pc.autoReady = true
+	b := newTestBaseWithConfig(t, leakCheckConfig(fmt.Sprintf("sh -c 'sleep 0.3 && touch %s && exit 1'", marker), ""),
+		map[string]process.Process{"a": a, "c": pc}, &stubPlanner{})
+	b.leakProbeInterval = 10 * time.Millisecond
+	b.runningCheckTimeout = 50 * time.Millisecond
+	leakA(t, b, a)
+	waitProcessed(t, b.testProcessed, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w, done := serveAsync(b, newRequestCtx(ctx, "c"))
+	select {
+	case <-done:
+		t.Fatalf("c finished while a's runningCheck only timed out: status=%d body=%q", w.Code, w.Body.String())
+	case <-time.After(700 * time.Millisecond): // past the check's own 0.3s sleep
+	}
+	if got := pc.runCalls.Load(); got != 0 {
+		t.Fatalf("c.runCalls=%d want 0 while a's leak is live", got)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("timed-out runningCheck kept running (marker written): its process group was not killed")
+	}
+	cancel()
+	waitSignal(t, done, "cancelled c request")
+}
+
+// TestBaseRouter_NeverHealthyLeakNeedsUnload: a force-killed while still
+// loading never answered its checkEndpoint, so its refused port proves
+// nothing and, without runningCheck, nothing watches it. c is refused at once
+// (not queued) with a 503 naming a, and a is released only by an unload whose
+// cmdStop completes: a failing cmdStop keeps it counted.
+func TestBaseRouter_NeverHealthyLeakNeedsUnload(t *testing.T) {
+	skipWithoutShell(t)
+	okFile := filepath.Join(t.TempDir(), "stopped")
+	a := newFakeProcess("a")
+	a.setState(process.StateStarting) // loading weights, port not open yet
+	pc := newFakeProcess("c")
+	pc.autoReady = true
+	b := newTestBaseWithConfig(t, leakCheckConfig("", fmt.Sprintf("sh -c 'test -e %s'", okFile)),
+		map[string]process.Process{"a": a, "c": pc}, &stubPlanner{})
+	b.leakProbeInterval = 10 * time.Millisecond
+	leakA(t, b, a)
+	waitProcessed(t, b.testProcessed, 1)
+	time.Sleep(100 * time.Millisecond) // many probe intervals: a must stay leaked
+
+	refused := func(model string) {
+		t.Helper()
+		w, done := serveAsync(b, newRequest(model))
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("%s request did not return: queued behind a leak nothing will clear", model)
+		}
+		body := w.Body.String()
+		if w.Code != http.StatusServiceUnavailable || !strings.Contains(body, "memory_admission") ||
+			!strings.Contains(body, "leaked: force-killed, still running?") || !strings.Contains(body, "unload a to release") {
+			t.Fatalf("%s status=%d body=%q want a 503 naming leaked a", model, w.Code, body)
+		}
+	}
+	refused("c")
+	refused("a")
+
+	b.Unload(time.Second, "a") // cmdStop exits 1: not released
+	waitProcessed(t, b.testProcessed, 1)
+	refused("c")
+
+	if err := os.WriteFile(okFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b.Unload(time.Second, "a") // cmdStop exits 0: released
+	waitProcessed(t, b.testProcessed, 1)
+	w := httptest.NewRecorder()
+	b.ServeHTTP(w, newRequest("c"))
+	if w.Code != http.StatusOK || pc.serveCalls.Load() != 1 {
+		t.Fatalf("c status=%d serveCalls=%d body=%q want 200/1 after a was unloaded", w.Code, pc.serveCalls.Load(), w.Body.String())
 	}
 }
