@@ -83,7 +83,9 @@ type Effects interface {
 	// set it hands the Swapper.
 	RunningModels() map[string]process.ProcessState
 	// StartSwap launches the swap goroutine for modelID, stopping evict first.
-	StartSwap(modelID string, evict []string)
+	// ctx is cancelled when an unload cancels the swap: once it is, the swap
+	// must not start modelID, and reports an error in its SwapDone instead.
+	StartSwap(ctx context.Context, modelID string, evict []string)
 	// GrantError responds to a caller with an error.
 	GrantError(req HandlerReq, err error)
 	// GrantServe hands a caller the wrapped handler for modelID and reports

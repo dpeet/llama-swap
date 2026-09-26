@@ -88,5 +88,10 @@ The log shows `was force-killed; counting its ... memoryCeiling` and later
 `leaked model ... cleared`. A container that never goes away blocks those loads
 until you stop it by hand.
 
+Unloading a model while it is still loading (the UI's "Cancel load") cancels
+that load: the model is not started once the models it was evicting have
+stopped, and its and their ceilings stay counted until that has finished. A
+new request for it meanwhile queues and loads normally afterwards.
+
 Already-running models and adopt attaches are never refused. Measure ceilings
 under real load: an under-sized ceiling lets two models in that do not fit.

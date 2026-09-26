@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -22,6 +23,18 @@ type activeSwap struct {
 	modelID string
 	evict   []string
 	waiters []HandlerReq
+	// cancel cancels the ctx handed to Effects.StartSwap.
+	cancel context.CancelFunc
+	// cancelled marks a swap whose target was unloaded mid-swap. Its waiters are
+	// already released, but the entry stays in active until its SwapDone,
+	// because its goroutine may still be stopping evictees (or, if the cancel
+	// lost the race with EnsureReady, starting the target): until then the
+	// target and its evictees stay charged and colliding requests keep
+	// queuing. New requests for the target queue instead of joining it.
+	cancelled bool
+	// unloadTimeout is the cancelling unload's stop timeout, reused if the
+	// target turns out to have started anyway (see OnSwapDone).
+	unloadTimeout time.Duration
 }
 
 // FIFO is the default scheduler. Requests are handled in a first-in, first-out order.
@@ -118,7 +131,8 @@ func NewFIFO(name string, logger *logmon.Monitor, planner Swapper, cfg config.Fi
 //
 //  1. Unknown model — respond with ErrModelNotFound and move on.
 //  2. A swap to the same model is already in flight — attach this waiter so
-//     one swap serves all callers that asked for the same model.
+//     one swap serves all callers that asked for the same model. A swap an
+//     unload cancelled is not joined: the request queues until its SwapDone.
 //  3. Fast path — the target process is already ready, the planner sees
 //     nothing to evict, and no in-flight swap is evicting it. Hand back its
 //     ServeHTTP immediately.
@@ -140,12 +154,16 @@ func (s *FIFO) OnRequest(req HandlerReq) {
 	// The eviction picture is built BEFORE admission because the hard memory
 	// refusal below needs it. A request joining an in-flight swap for the same
 	// model does not: that swap's memory was already admitted.
-	sw, joining := s.active[req.Model]
+	sw, inSwap := s.active[req.Model]
+	joining := inSwap && !sw.cancelled
+	// A cancelled swap for this model is still winding down; the request waits
+	// for its SwapDone in the queue (drainQueue then decides it afresh).
+	behindCancelled := inSwap && sw.cancelled
 	var (
 		running, evict []string
 		fastPath       bool
 	)
-	if !joining {
+	if !inSwap {
 		running = s.runningSet(req.Model)
 		evict = s.planner.EvictionFor(req.Model, running)
 		// (3) Fast path: ready, nothing to evict, and nobody is evicting us.
@@ -166,7 +184,7 @@ func (s *FIFO) OnRequest(req HandlerReq) {
 	//     would ever drain it).
 	// A load that does not fit but has something pending is admitted and
 	// queued below, waiting for that to settle.
-	memFits := joining || fastPath || isAdopt(req) || s.fits(req.Model, evict, running)
+	memFits := joining || behindCancelled || fastPath || isAdopt(req) || s.fits(req.Model, evict, running)
 	if !memFits {
 		if s.neverFits(req.Model) {
 			s.logger.Debugf("%s: refusing model %s (never fits memory budget)", s.name, req.Model)
@@ -189,6 +207,12 @@ func (s *FIFO) OnRequest(req HandlerReq) {
 	if joining {
 		s.logger.Debugf("%s: joining in-flight swap for model %s (%d waiters)", s.name, req.Model, len(sw.waiters)+1)
 		sw.waiters = append(sw.waiters, req)
+		return
+	}
+
+	if behindCancelled {
+		s.logger.Debugf("%s: queuing request for model %s (its cancelled swap has not finished)", s.name, req.Model)
+		s.enqueue(req)
 		return
 	}
 
@@ -282,13 +306,13 @@ func (s *FIFO) OnSwapDone(ev SwapDone) {
 	s.recordLeaks(ev.Leaked)
 
 	sw, ok := s.active[ev.ModelID]
-	if ok && ev.Err == nil {
+	if ok && !sw.cancelled && ev.Err == nil {
 		// Started again: its footprint is now counted as resident through the
 		// running set, so the leak entry would double-count it. Both guards are
 		// needed because a successful EnsureReady can be overtaken before its
-		// SwapDone arrives here. Owning the active entry rules out an OnUnload
-		// that already force-killed the target (it removed the entry and
-		// recorded the leak this stale success must not erase); the model still
+		// SwapDone arrives here. Owning a live (not cancelled) entry rules out an
+		// OnUnload that already force-killed the target (it cancelled the entry
+		// and recorded the leak this stale success must not erase); the model still
 		// reading Ready rules out it having stopped on its own (TTL, crash) in
 		// that gap. Either alone leaves one of those paths able to clear a leak
 		// whose container may still be up.
@@ -300,6 +324,21 @@ func (s *FIFO) OnSwapDone(ev SwapDone) {
 		return
 	}
 	delete(s.active, ev.ModelID)
+	sw.cancel()
+
+	if sw.cancelled {
+		// Its waiters were released by OnUnload. A success here means the
+		// target started although the unload cancelled the swap: the cancel
+		// landed after doSwap's last check but before its start request reached
+		// the process, so the unload's Stop found nothing to stop. Stop it now,
+		// as the unload asked, before its memory is credited as free.
+		if ev.Err == nil {
+			s.logger.Warnf("%s: model %s started after its swap was cancelled by an unload; stopping it", s.name, ev.ModelID)
+			s.recordLeaks(s.effects.StopProcesses(sw.unloadTimeout, []string{ev.ModelID}))
+		}
+		s.drainQueue()
+		return
+	}
 
 	for _, w := range sw.waiters {
 		if ev.Err != nil {
@@ -335,9 +374,11 @@ func (s *FIFO) OnUnload(targets []string, timeout time.Duration) {
 		targetSet[id] = true
 	}
 
-	// Release waiters of any in-flight swap whose target is being unloaded.
-	// The swap goroutine itself is left to finish on its own; when its
-	// SwapDone arrives, OnSwapDone will find no entry in active and drop it.
+	// Cancel any in-flight swap whose target is being unloaded and release its
+	// waiters. The entry is kept (see activeSwap.cancelled) so the target and
+	// its evictees stay charged until the swap's SwapDone; deleting it here let
+	// a second load in while the orphaned swap went on to start its target.
+	// Cancelling the swap's ctx makes doSwap skip that start.
 	for id := range targetSet {
 		sw, ok := s.active[id]
 		if !ok {
@@ -346,7 +387,10 @@ func (s *FIFO) OnUnload(targets []string, timeout time.Duration) {
 		for _, w := range sw.waiters {
 			s.grantError(w, unloadErr)
 		}
-		delete(s.active, id)
+		sw.waiters = nil
+		sw.cancelled = true
+		sw.unloadTimeout = timeout
+		sw.cancel()
 	}
 
 	// Drop queued requests addressed to unloaded models. Requests for other
@@ -370,8 +414,8 @@ func (s *FIFO) OnUnload(targets []string, timeout time.Duration) {
 	// is recorded as a leak so its memory is not credited as freed.
 	s.recordLeaks(s.effects.StopProcesses(timeout, targets))
 
-	// Removing entries from active above may have unblocked queued requests
-	// that previously collided with the now-cancelled swaps.
+	// Stopping the targets and dropping their queued requests may have
+	// unblocked queued requests for other models.
 	s.drainQueue()
 }
 
@@ -676,13 +720,15 @@ func (s *FIFO) memoryRejectMessage(target string) string {
 // the set EvictionFor saw, forwarded to OnSwapStart so the planner logs against
 // the same picture it decided on.
 func (s *FIFO) startSwap(initial HandlerReq, evict, running []string) {
+	ctx, cancel := context.WithCancel(context.Background())
 	s.active[initial.Model] = &activeSwap{
 		modelID: initial.Model,
 		evict:   evict,
 		waiters: []HandlerReq{initial},
+		cancel:  cancel,
 	}
 	s.planner.OnSwapStart(initial.Model, running)
-	s.effects.StartSwap(initial.Model, evict)
+	s.effects.StartSwap(ctx, initial.Model, evict)
 }
 
 // enqueue inserts req into the queue in priority order: it goes just before the
@@ -726,6 +772,10 @@ func (s *FIFO) drainQueue() {
 			continue
 		}
 		if sw, ok := s.active[req.Model]; ok {
+			if sw.cancelled {
+				remaining = append(remaining, req) // wait for its SwapDone
+				continue
+			}
 			s.logger.Debugf("%s: queued request for model %s now joining in-flight swap", s.name, req.Model)
 			sw.waiters = append(sw.waiters, req)
 			continue
