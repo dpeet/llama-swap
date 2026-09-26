@@ -38,6 +38,14 @@ type leakGone struct {
 	gen     uint64
 }
 
+// selfStop is a process reporting a stop the router did not ask for (a TTL
+// unload or an upstream crash, see process.Process.OnSelfStop). err is that
+// stop's result; ErrForcedKill means the upstream may still hold its memory.
+type selfStop struct {
+	modelID string
+	err     error
+}
+
 // leakWatch is one running leak watcher. Only the run loop touches these.
 type leakWatch struct {
 	gen    uint64
@@ -89,6 +97,7 @@ type baseRouter struct {
 	swapDoneCh  chan scheduler.SwapDone
 	serveDoneCh chan scheduler.ServeDoneEvent
 	leakGoneCh  chan leakGone
+	selfStopCh  chan selfStop
 
 	// leakWatches/leakGen are owned by the run loop: WatchLeak and UnwatchLeak
 	// are only called from the scheduler, which runs on it. The probe interval
@@ -134,6 +143,7 @@ func newBaseRouter(
 		swapDoneCh:  make(chan scheduler.SwapDone),
 		serveDoneCh: make(chan scheduler.ServeDoneEvent),
 		leakGoneCh:  make(chan leakGone),
+		selfStopCh:  make(chan selfStop),
 		runDone:     make(chan struct{}),
 
 		leakWatches:       make(map[string]leakWatch),
@@ -145,6 +155,20 @@ func newBaseRouter(
 		return nil, err
 	}
 	b.schedule = sched
+	// Registered before any process can start, so no self-stop is missed. The
+	// report is forwarded from its own goroutine because the callback runs on
+	// the process's run loop (upstream crash), which must not wait on the
+	// router's: that loop may itself be blocked stopping this very process.
+	for id, p := range processes {
+		p.OnSelfStop(func(err error) {
+			go func() {
+				select {
+				case b.selfStopCh <- selfStop{modelID: id, err: err}:
+				case <-b.shutdownCtx.Done():
+				}
+			}()
+		})
+	}
 	return b, nil
 }
 
@@ -182,6 +206,10 @@ func (b *baseRouter) run() {
 
 		case ev := <-b.serveDoneCh:
 			b.schedule.OnServeDone(ev)
+
+		case ev := <-b.selfStopCh:
+			b.schedule.OnSelfStop(ev.modelID, errors.Is(ev.err, process.ErrForcedKill))
+			b.notifyProcessed()
 
 		case ev := <-b.leakGoneCh:
 			// Only the current watch for the model counts; a stale one lost a

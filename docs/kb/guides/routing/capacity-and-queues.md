@@ -76,7 +76,8 @@ fits the budget. If it does not:
   loading stream gets the refusal as an SSE error event (the same `memory_admission` error body) followed by
   `data: [DONE]`.
 
-If stopping a model had to force-kill it (its `unloadTimeout` ran out), its
+If stopping a model had to force-kill it (its `unloadTimeout` ran out) for a
+swap, an unload or its `ttl`, its
 container may still hold memory although llama-swap shows it stopped. With
 `memoryPool` set, llama-swap keeps counting that model's `memoryCeiling` and
 probes its `proxy` + `checkEndpoint` every 5 seconds; the ceiling is released

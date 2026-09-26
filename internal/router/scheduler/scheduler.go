@@ -69,6 +69,10 @@ type Scheduler interface {
 	// OnLeakGone handles the leak watcher reporting that a force-killed model's
 	// upstream stopped answering (see Effects.WatchLeak): its memory is free.
 	OnLeakGone(modelID string)
+	// OnSelfStop handles a process that stopped without the router asking (a
+	// TTL unload or an upstream crash). forced reports that the stop had to
+	// force-kill (process.ErrForcedKill), so its upstream may still hold memory.
+	OnSelfStop(modelID string, forced bool)
 }
 
 // Effects is implemented by the baseRouter. The scheduler calls back through it

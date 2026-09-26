@@ -615,3 +615,95 @@ func TestProcessCommand_StartFailureSurfacesForcedKill(t *testing.T) {
 		t.Errorf("state=%s want %s", got, StateStopped)
 	}
 }
+
+// recordSelfStops registers an OnSelfStop callback that forwards every report.
+func recordSelfStops(p *ProcessCommand) <-chan error {
+	ch := make(chan error, 4)
+	p.OnSelfStop(func(err error) { ch <- err })
+	return ch
+}
+
+// TestProcessCommand_TTLForcedKillReportsSelfStop: the TTL goroutine's own
+// Stop used to discard its result, so the router never learned that the stop
+// happened at all, let alone that it force-killed. It must now be reported
+// through OnSelfStop with ErrForcedKill.
+func TestProcessCommand_TTLForcedKillReportsSelfStop(t *testing.T) {
+	script, ready := writeTermIgnoringScript(t)
+	p := newProcessCommand(t, config.ModelConfig{
+		Cmd:           script,
+		Proxy:         "http://127.0.0.1:1", // unused: health check disabled
+		CheckEndpoint: "none",
+		UnloadAfter:   1,
+		UnloadTimeout: 1,
+	})
+	p.waitDelay = 200 * time.Millisecond
+	reports := recordSelfStops(p)
+
+	runErr := runAsync(t, p)
+	waitForFile(t, ready)
+
+	select {
+	case err := <-reports:
+		if !errors.Is(err, ErrForcedKill) {
+			t.Fatalf("self-stop err=%v want ErrForcedKill", err)
+		}
+	case <-time.After(10 * time.Second): // 1s TTL + ticker + 1s graceful window
+		t.Fatal("TTL stop was not reported")
+	}
+	if got := p.State(); got != StateStopped {
+		t.Errorf("state=%s want %s", got, StateStopped)
+	}
+	select {
+	case <-runErr:
+	case <-time.After(testReturnTimeout):
+		t.Error("Run did not return after the TTL stop")
+	}
+}
+
+// TestProcessCommand_UpstreamExitReportsSelfStop: an upstream that exits on its
+// own is reported with a nil error, and a stop the owner asked for is not
+// reported at all (the owner already has its result).
+func TestProcessCommand_UpstreamExitReportsSelfStop(t *testing.T) {
+	dir := t.TempDir()
+	exitFile := filepath.Join(dir, "exit")
+	script := filepath.Join(dir, "exit-on-file.sh")
+	body := fmt.Sprintf("#!/bin/bash\nwhile [ ! -e %q ]; do sleep 0.05; done\n", exitFile)
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	p := newProcessCommand(t, config.ModelConfig{
+		Cmd:           script,
+		Proxy:         "http://127.0.0.1:1",
+		CheckEndpoint: "none",
+	})
+	p.waitDelay = 200 * time.Millisecond
+	reports := recordSelfStops(p)
+
+	runErr := runAsync(t, p)
+	if err := p.Stop(testStopTimeout); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	<-runErr
+	select {
+	case err := <-reports:
+		t.Fatalf("owner-initiated Stop reported as a self-stop (err=%v)", err)
+	default:
+	}
+
+	runErr = runAsync(t, p)
+	if err := os.WriteFile(exitFile, nil, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	select {
+	case err := <-reports:
+		if err != nil {
+			t.Fatalf("self-stop err=%v want nil for an upstream exit", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("upstream exit was not reported")
+	}
+	if got := p.State(); got != StateStopped {
+		t.Errorf("state=%s want %s", got, StateStopped)
+	}
+	<-runErr
+}

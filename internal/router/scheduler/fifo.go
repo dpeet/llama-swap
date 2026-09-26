@@ -429,6 +429,23 @@ func (s *FIFO) OnLeakGone(modelID string) {
 	s.drainQueue()
 }
 
+// OnSelfStop drains the queue after a process stopped on its own: a load that
+// queued behind it (memoryPending counts a StateStopping model) may now fit, or
+// must now be refused, and nothing else would re-check it. A forced TTL stop is
+// recorded as a leak first, like a forced unload, but only while the model is
+// still stopped and no swap owns it: the report is delivered asynchronously,
+// and once the model is being started again its footprint is counted through
+// the running set and a leak entry would double-count it.
+func (s *FIFO) OnSelfStop(modelID string, forced bool) {
+	if forced {
+		st, _ := s.effects.ModelState(modelID)
+		if _, inSwap := s.active[modelID]; !inSwap && st == process.StateStopped {
+			s.recordLeaks([]string{modelID})
+		}
+	}
+	s.drainQueue()
+}
+
 // recordLeaks marks force-killed models as still holding their ceilings and
 // starts watching their upstreams. A no-op with the gate off (pool == 0),
 // because there is no budget to charge them against.
@@ -660,8 +677,8 @@ func (s *FIFO) memoryHolders(target string, evict, running []string) string {
 // underway, and a failed start releases its target's share), a model in
 // StateStopping (a stop that has not finished), or a leaked model (its upstream
 // is being watched). Only then is it worth queuing an over-budget load, because
-// each ends in an event that runs drainQueue again (OnSwapDone, OnUnload,
-// OnLeakGone).
+// each ends in an event that runs drainQueue again (OnSwapDone, OnUnload or
+// OnSelfStop for a TTL stop, OnLeakGone).
 // The rule is deliberately coarse (it does not ask whether the pending work
 // would free enough): drainQueue re-checks and refuses once nothing is pending,
 // so the cost of a false "pending" is a bounded wait, not a stranded request.
@@ -754,11 +771,9 @@ func (s *FIFO) enqueue(req HandlerReq) {
 // decision tree against the (now smaller) active set. Items that can now start
 // or join become satisfied; items still blocked remain queued in original order
 // and are retried the next time drainQueue runs. That is only on OnSwapDone,
-// on OnServeDone when a model's in-flight count reaches zero, on OnUnload, and
-// on OnLeakGone:
-// a process that stops on its own (TTL expiry, upstream crash) sends the
-// scheduler no event, so the memory it frees goes unnoticed until one of those
-// fires.
+// on OnServeDone when a model's in-flight count reaches zero, on OnUnload, on
+// OnLeakGone, and on OnSelfStop (a process that stopped on its own: TTL
+// expiry, upstream crash).
 func (s *FIFO) drainQueue() {
 	if len(s.queued) == 0 {
 		return

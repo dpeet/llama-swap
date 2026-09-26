@@ -1652,3 +1652,75 @@ func TestFIFO_CancelledSwapThatStartedAnywayIsStopped(t *testing.T) {
 		t.Error("cancelled swap entry not removed on its SwapDone")
 	}
 }
+
+// TestFIFO_Memory_SelfStopDrainsQueue: c queued because a was stopping on its
+// own (a TTL unload; memoryPending counts StateStopping). Nothing the router
+// did started that stop, so only the self-stop report can re-check c once a
+// is gone.
+func TestFIFO_Memory_SelfStopDrainsQueue(t *testing.T) {
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"c": {MemoryCeiling: 60},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateStopping // TTL unload in progress
+	eff.states["c"] = process.StateStopped
+
+	r := reqCh("c")
+	s.OnRequest(r)
+	assertAdmitted(t, r)
+	if eff.startsFor("c") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(c)=%d queued=%d want 0/1 while a is stopping", eff.startsFor("c"), len(s.queued))
+	}
+
+	eff.states["a"] = process.StateStopped
+	s.OnSelfStop("a", false)
+	if eff.startsFor("c") != 1 || len(s.queued) != 0 {
+		t.Fatalf("startsFor(c)=%d queued=%d want 1/0 after a's TTL stop finished", eff.startsFor("c"), len(s.queued))
+	}
+	if len(s.leaked) != 0 {
+		t.Errorf("leaked=%v want none for a graceful stop", s.leaked)
+	}
+}
+
+// TestFIFO_Memory_ForcedSelfStopRecordsLeak: a TTL stop that force-killed is a
+// leak like a forced unload; the queued load keeps waiting until the watcher
+// reports a's upstream gone.
+func TestFIFO_Memory_ForcedSelfStopRecordsLeak(t *testing.T) {
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"c": {MemoryCeiling: 60},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateStopping
+	eff.states["c"] = process.StateStopped
+	s.OnRequest(reqCh("c"))
+
+	eff.states["a"] = process.StateStopped
+	s.OnSelfStop("a", true)
+	if _, ok := s.leaked["a"]; !ok || !eff.watching["a"] {
+		t.Fatalf("leaked=%v watching=%v want a leaked and watched", s.leaked, eff.watching)
+	}
+	if eff.startsFor("c") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(c)=%d queued=%d want 0/1 while a's leak is live", eff.startsFor("c"), len(s.queued))
+	}
+	s.OnLeakGone("a")
+	if eff.startsFor("c") != 1 {
+		t.Fatalf("startsFor(c)=%d want 1 after the leak cleared", eff.startsFor("c"))
+	}
+}
+
+// TestFIFO_Memory_LateForcedSelfStopIgnoredOnceRestarted: the self-stop report
+// is asynchronous. If the model is already being started again by the time it
+// arrives, its footprint is counted through the running set, so recording a
+// leak would double-count it.
+func TestFIFO_Memory_LateForcedSelfStopIgnoredOnceRestarted(t *testing.T) {
+	models := map[string]config.ModelConfig{"a": {MemoryCeiling: 60}}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateStopped
+	s.OnRequest(reqCh("a")) // swap for a in flight
+	s.OnSelfStop("a", true)
+	if len(s.leaked) != 0 {
+		t.Fatalf("leaked=%v want none: a is being started again", s.leaked)
+	}
+}
