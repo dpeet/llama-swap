@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -306,10 +307,15 @@ func (b *baseRouter) StopProcesses(timeout time.Duration, ids []string) []string
 		wg.Add(1)
 		go func(idx int, id string, p process.Process) {
 			defer wg.Done()
-			if err := p.Stop(timeout); err != nil {
+			err := p.Stop(timeout)
+			if err != nil {
 				b.logger.Warnf("%s: stopping %s failed: %v", b.name, id, err)
-				forcedAt[idx] = errors.Is(err, process.ErrForcedKill)
 			}
+			// Taken even after an ErrForcedKill, so the same forced stop is not
+			// reported again later. A nil Stop with a pending report means the
+			// process was already stopped (Stop is then a no-op) by a stop that
+			// force-killed, e.g. a TTL unload this Stop waited for.
+			forcedAt[idx] = errors.Is(err, process.ErrForcedKill) || takeForcedStop(b.logger, b.name, id, p, err)
 		}(i, id, p)
 	}
 	wg.Wait()
@@ -320,6 +326,33 @@ func (b *baseRouter) StopProcesses(timeout time.Duration, ids []string) []string
 		}
 	}
 	return forced
+}
+
+// takeForcedStop takes p's forced-stop report (process.TakeForcedStop) after a
+// Stop of it returned err, and logs a report that Stop itself did not carry.
+func takeForcedStop(logger *logmon.Monitor, name, id string, p process.Process, err error) bool {
+	if !p.TakeForcedStop() {
+		return false
+	}
+	if err == nil {
+		logger.Warnf("%s: %s was already stopped by a stop that force-killed it (e.g. its TTL unload); its upstream may still hold memory", name, id)
+	}
+	return true
+}
+
+// TakeForcedStops implements scheduler.Effects.
+func (b *baseRouter) TakeForcedStops(exclude []string) []string {
+	var out []string
+	for id, p := range b.processes {
+		if slices.Contains(exclude, id) || p.State() != process.StateStopped {
+			continue
+		}
+		if p.TakeForcedStop() {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // leakProbe runs one check of a leaked model's upstream and reports whether it
@@ -583,7 +616,15 @@ func (b *baseRouter) doSwap(ctx context.Context, modelID string, toStop []string
 		wg.Add(1)
 		go func(idx int, p process.Process, id string) {
 			defer wg.Done()
-			if err := p.Stop(b.unloadTimeout(id)); err != nil {
+			err := p.Stop(b.unloadTimeout(id))
+			// An evictee already stopped by a forced stop (its TTL unload,
+			// which this Stop waited for) makes Stop a no-op nil: without the
+			// report the eviction would read as completed and the target would
+			// start on top of the evictee's still-live container.
+			if takeForcedStop(b.logger, b.name, id, p, err) && err == nil {
+				err = process.ErrForcedKill
+			}
+			if err != nil {
 				b.logger.Warnf("%s: stopping %s failed: %v", b.name, id, err)
 				stopErrs[idx] = fmt.Errorf("%s: %w", id, err)
 			}
@@ -647,8 +688,9 @@ func (b *baseRouter) doSwap(ctx context.Context, modelID string, toStop []string
 		b.logger.Warnf("%s: starting %s failed: %v", b.name, modelID, err)
 	}
 	// A failed start whose own teardown was forced (process wraps it into the
-	// start error) may have left the target's container up too.
-	if errors.Is(err, process.ErrForcedKill) {
+	// start error) may have left the target's container up too. The report is
+	// taken either way so it is not counted a second time.
+	if forced := target.TakeForcedStop(); forced || errors.Is(err, process.ErrForcedKill) {
 		leaked = append(leaked, modelID)
 	}
 

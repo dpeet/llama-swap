@@ -593,6 +593,9 @@ func TestProcessCommand_StopDuringStartupSurfacesForcedKill(t *testing.T) {
 	if p.UpstreamSeenHealthy() {
 		t.Error("UpstreamSeenHealthy=true for a run aborted before its health check passed")
 	}
+	if !p.TakeForcedStop() {
+		t.Error("TakeForcedStop=false after a forced abort of a start")
+	}
 	select {
 	case <-runErr:
 	case <-time.After(testReturnTimeout):
@@ -622,6 +625,9 @@ func TestProcessCommand_StartFailureSurfacesForcedKill(t *testing.T) {
 	}
 	if got := p.State(); got != StateStopped {
 		t.Errorf("state=%s want %s", got, StateStopped)
+	}
+	if !p.TakeForcedStop() {
+		t.Error("TakeForcedStop=false after a failed start's forced teardown")
 	}
 }
 
@@ -655,6 +661,11 @@ func TestProcessCommand_TTLForcedKillReportsSelfStop(t *testing.T) {
 	case err := <-reports:
 		if !errors.Is(err, ErrForcedKill) {
 			t.Fatalf("self-stop err=%v want ErrForcedKill", err)
+		}
+		// Recorded before the process read Stopped, so it was there before
+		// this asynchronous report.
+		if !p.TakeForcedStop() {
+			t.Error("TakeForcedStop=false after a forced TTL stop")
 		}
 	case <-time.After(10 * time.Second): // 1s TTL + ticker + 1s graceful window
 		t.Fatal("TTL stop was not reported")
@@ -781,5 +792,80 @@ func TestProcess_RunBoundedCommand(t *testing.T) {
 	time.Sleep(700 * time.Millisecond)
 	if _, err := os.Stat(marker); err == nil {
 		t.Error("the timed-out command's child kept running: process group not killed")
+	}
+}
+
+// TestProcessCommand_TakeForcedStop: the forced-stop report is set by a
+// forced Stop even when nobody reads Stop's error, is handed out once, is not
+// set by a graceful stop, and is cleared when a new start begins, so a model
+// started again is not taken for a leak of its previous run.
+func TestProcessCommand_TakeForcedStop(t *testing.T) {
+	script, ready := writeTermIgnoringScript(t)
+	p := newProcessCommand(t, config.ModelConfig{
+		Cmd:           script,
+		Proxy:         "http://127.0.0.1:1", // unused: health check disabled
+		CheckEndpoint: "none",
+	})
+	p.waitDelay = 200 * time.Millisecond
+
+	forcedStop := func() {
+		t.Helper()
+		_ = os.Remove(ready)
+		runErr := runAsync(t, p)
+		waitForFile(t, ready) // the SIGTERM trap is installed
+		if err := p.Stop(300 * time.Millisecond); !errors.Is(err, ErrForcedKill) {
+			t.Fatalf("Stop err=%v want ErrForcedKill", err)
+		}
+		<-runErr
+	}
+
+	if p.TakeForcedStop() {
+		t.Fatal("TakeForcedStop=true before any stop")
+	}
+	forcedStop()
+	if err := p.Stop(time.Second); err != nil { // no-op on a stopped process
+		t.Fatalf("second Stop err=%v want nil", err)
+	}
+	if !p.TakeForcedStop() {
+		t.Fatal("TakeForcedStop=false after a forced stop")
+	}
+	if p.TakeForcedStop() {
+		t.Fatal("TakeForcedStop=true twice for one forced stop")
+	}
+
+	forcedStop()
+	// Not taken: a successful start must clear it on its own.
+	_ = os.Remove(ready)
+	runErr := runAsync(t, p)
+	waitForFile(t, ready)
+	waitForState(t, p, StateReady)
+	if p.TakeForcedStop() {
+		t.Fatal("TakeForcedStop=true after the model started again")
+	}
+	if err := p.Stop(300 * time.Millisecond); !errors.Is(err, ErrForcedKill) {
+		t.Fatalf("Stop err=%v want ErrForcedKill", err)
+	}
+	<-runErr
+	if !p.TakeForcedStop() {
+		t.Fatal("TakeForcedStop=false after the restarted run's forced stop")
+	}
+}
+
+// TestProcessCommand_GracefulStopSetsNoForcedStop: a stop that completes in
+// its graceful window leaves nothing to take.
+func TestProcessCommand_GracefulStopSetsNoForcedStop(t *testing.T) {
+	p := newProcessCommand(t, config.ModelConfig{
+		Cmd:           "sleep 30",
+		Proxy:         "http://127.0.0.1:1",
+		CheckEndpoint: "none",
+	})
+	runErr := runAsync(t, p)
+	waitForState(t, p, StateReady)
+	if err := p.Stop(testStopTimeout); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	<-runErr
+	if p.TakeForcedStop() {
+		t.Fatal("TakeForcedStop=true after a graceful stop")
 	}
 }

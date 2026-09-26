@@ -78,6 +78,12 @@ type fakeEffects struct {
 	// every model RerunStop was asked to run.
 	rerunOK map[string]bool
 	reruns  []string
+	// forcedStop holds untaken forced-stop reports (process.TakeForcedStop):
+	// a model whose last stop force-killed, e.g. a TTL unload. StopProcesses
+	// and TakeForcedStops take them.
+	forcedStop map[string]bool
+	// watchCalls counts WatchLeak calls per model.
+	watchCalls map[string]int
 }
 
 func newFakeEffects() *fakeEffects {
@@ -88,6 +94,8 @@ func newFakeEffects() *fakeEffects {
 		watching:    map[string]bool{},
 		unwatchable: map[string]bool{},
 		rerunOK:     map[string]bool{},
+		forcedStop:  map[string]bool{},
+		watchCalls:  map[string]int{},
 	}
 }
 
@@ -132,14 +140,30 @@ func (f *fakeEffects) StopProcesses(timeout time.Duration, ids []string) []strin
 		if _, ok := f.states[id]; ok {
 			f.states[id] = process.StateStopped
 		}
-		if f.forced[id] {
+		taken := f.forcedStop[id]
+		delete(f.forcedStop, id)
+		if f.forced[id] || taken {
 			forced = append(forced, id)
 		}
 	}
 	return forced
 }
 
+func (f *fakeEffects) TakeForcedStops(exclude []string) []string {
+	var out []string
+	for id := range f.forcedStop {
+		if slices.Contains(exclude, id) || f.states[id] != process.StateStopped {
+			continue
+		}
+		delete(f.forcedStop, id)
+		out = append(out, id)
+	}
+	slices.Sort(out)
+	return out
+}
+
 func (f *fakeEffects) WatchLeak(modelID string) bool {
+	f.watchCalls[modelID]++
 	if f.unwatchable[modelID] {
 		return false
 	}
@@ -1725,6 +1749,7 @@ func TestFIFO_Memory_ForcedSelfStopRecordsLeak(t *testing.T) {
 	s.OnRequest(reqCh("c"))
 
 	eff.states["a"] = process.StateStopped
+	eff.forcedStop["a"] = true // the process records it before reading Stopped
 	s.OnSelfStop("a", true)
 	if _, ok := s.leaked["a"]; !ok || !eff.watching["a"] {
 		t.Fatalf("leaked=%v watching=%v want a leaked and watched", s.leaked, eff.watching)
@@ -1841,5 +1866,146 @@ func TestFIFO_Memory_UnwatchedLeakClearedWhenStartedAgain(t *testing.T) {
 	s.OnSwapDone(SwapDone{ModelID: "a"})
 	if _, ok := s.leaked["a"]; ok {
 		t.Fatalf("leaked=%v want a cleared after a successful start", s.leaked)
+	}
+}
+
+// ── Forced stops reported late (F1) ─────────────────────────────────────────
+
+// forcedTTLFIFO: a (60) and c (60) cannot both fit a 100 pool, and the planner
+// does not evict a for c. a is in its TTL unload (Stopping).
+func forcedTTLFIFO(t *testing.T) (*FIFO, *fakeEffects) {
+	t.Helper()
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"c": {MemoryCeiling: 60},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{}, models, 100, 0)
+	eff.states["a"] = process.StateStopping
+	eff.states["c"] = process.StateStopped
+	return s, eff
+}
+
+// TestFIFO_Memory_UnloadDuringForcedTTLStopRecordsLeak: c queued behind a's
+// TTL stop. The owner unloads a; its Stop waits for the TTL stop, which
+// force-kills, and then returns nil (a no-op on a stopped process). The unload
+// used to drain the queue with no leak recorded and start c on top of a's
+// still-live container; the forced stop's report must now be taken there. The
+// late OnSelfStop must not record it again (no second watch).
+func TestFIFO_Memory_UnloadDuringForcedTTLStopRecordsLeak(t *testing.T) {
+	s, eff := forcedTTLFIFO(t)
+	r := reqCh("c")
+	s.OnRequest(r)
+	assertAdmitted(t, r)
+	if len(s.queued) != 1 {
+		t.Fatalf("queued=%d want 1 (a is stopping)", len(s.queued))
+	}
+
+	eff.forcedStop["a"] = true // the TTL stop the unload's Stop waited for was forced
+	s.OnUnload([]string{"a"}, time.Second)
+	if _, ok := s.leaked["a"]; !ok || !eff.watching["a"] {
+		t.Fatalf("leaked=%v watching=%v want a leaked and watched", s.leaked, eff.watching)
+	}
+	if eff.startsFor("c") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(c)=%d queued=%d want 0/1 (c must not load on top of a's container)", eff.startsFor("c"), len(s.queued))
+	}
+
+	s.OnSelfStop("a", true) // the TTL stop's own report, arriving late
+	if eff.watchCalls["a"] != 1 {
+		t.Fatalf("WatchLeak(a) called %d times want 1", eff.watchCalls["a"])
+	}
+	s.OnLeakGone("a", "test")
+	if eff.startsFor("c") != 1 {
+		t.Fatalf("startsFor(c)=%d want 1 once a's upstream is gone", eff.startsFor("c"))
+	}
+}
+
+// TestFIFO_Memory_RequestDuringOwnStopWaits: a request for a while a is in its
+// TTL stop used to start a swap whose EnsureReady started a the moment that
+// stop returned, racing a forced stop's teardown of its own container. It now
+// queues until the stop's outcome is known: a forced stop makes a a leaked
+// target (it keeps waiting, then starts once the leak clears).
+func TestFIFO_Memory_RequestDuringOwnStopWaits(t *testing.T) {
+	s, eff := forcedTTLFIFO(t)
+	r := reqCh("a")
+	s.OnRequest(r)
+	assertAdmitted(t, r)
+	if eff.startsFor("a") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(a)=%d queued=%d want 0/1 while a is stopping", eff.startsFor("a"), len(s.queued))
+	}
+	s.drainQueue() // an unrelated event drains while a still stops
+	if eff.startsFor("a") != 0 {
+		t.Fatalf("startsFor(a)=%d want 0 while a is stopping", eff.startsFor("a"))
+	}
+
+	eff.states["a"] = process.StateStopped
+	eff.forcedStop["a"] = true
+	s.OnSelfStop("a", true)
+	if _, ok := s.leaked["a"]; !ok {
+		t.Fatalf("leaked=%v want a", s.leaked)
+	}
+	if eff.startsFor("a") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(a)=%d queued=%d want 0/1 (a waits for its own leak)", eff.startsFor("a"), len(s.queued))
+	}
+	s.OnLeakGone("a", "test")
+	if eff.startsFor("a") != 1 || len(s.queued) != 0 {
+		t.Fatalf("startsFor(a)=%d queued=%d want 1/0 once a's old upstream is gone", eff.startsFor("a"), len(s.queued))
+	}
+}
+
+// TestFIFO_Memory_RequestDuringGracefulOwnStopStarts: the same wait ends with a
+// start at once when the stop was graceful.
+func TestFIFO_Memory_RequestDuringGracefulOwnStopStarts(t *testing.T) {
+	s, eff := forcedTTLFIFO(t)
+	s.OnRequest(reqCh("a"))
+	eff.states["a"] = process.StateStopped
+	s.OnSelfStop("a", false)
+	if eff.startsFor("a") != 1 || len(s.queued) != 0 || len(s.leaked) != 0 {
+		t.Fatalf("startsFor(a)=%d queued=%d leaked=%v want 1/0/none", eff.startsFor("a"), len(s.queued), s.leaked)
+	}
+}
+
+// TestFIFO_Memory_UnreportedForcedStopChargedAtOnce: a's forced TTL stop has
+// finished but its OnSelfStop has not arrived. A load decided in that gap must
+// charge a (its report is taken on the spot), not credit it as freed.
+func TestFIFO_Memory_UnreportedForcedStopChargedAtOnce(t *testing.T) {
+	s, eff := forcedTTLFIFO(t)
+	eff.states["a"] = process.StateStopped
+	eff.forcedStop["a"] = true
+
+	r := reqCh("c")
+	s.OnRequest(r)
+	assertAdmitted(t, r)
+	if _, ok := s.leaked["a"]; !ok {
+		t.Fatalf("leaked=%v want a recorded before c was decided", s.leaked)
+	}
+	if eff.startsFor("c") != 0 || len(s.queued) != 1 {
+		t.Fatalf("startsFor(c)=%d queued=%d want 0/1", eff.startsFor("c"), len(s.queued))
+	}
+}
+
+// TestFIFO_Memory_EvicteeForcedStopLeftToItsSwap: an in-flight swap's evictee
+// is charged until its SwapDone, and its forced-stop report belongs to that
+// swap (doSwap takes it to decide whether the eviction completed). Taking it
+// from the run loop first would make doSwap start its target on top.
+func TestFIFO_Memory_EvicteeForcedStopLeftToItsSwap(t *testing.T) {
+	models := map[string]config.ModelConfig{
+		"a": {MemoryCeiling: 60},
+		"b": {MemoryCeiling: 30},
+		"c": {MemoryCeiling: 40},
+	}
+	s, eff := newFIFOMem(t, &stubPlanner{evict: map[string][]string{"b": {"a"}}}, models, 100, 0)
+	eff.states["a"] = process.StateReady
+	eff.states["b"] = process.StateStopped
+	eff.states["c"] = process.StateStopped
+	s.OnRequest(reqCh("b"))
+	eff.states["a"] = process.StateStopped
+	eff.forcedStop["a"] = true
+
+	s.OnRequest(reqCh("c"))
+	if !eff.forcedStop["a"] {
+		t.Fatal("a's forced-stop report was taken from under b's swap")
+	}
+	if eff.startsFor("c") != 0 {
+		t.Fatalf("startsFor(c)=%d want 0 (a stays charged until b's SwapDone)", eff.startsFor("c"))
 	}
 }

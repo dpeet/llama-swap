@@ -61,7 +61,8 @@ type FIFO struct {
 	reserved map[string]int
 	inFlight map[string]int
 	queued   []HandlerReq
-	// leaked holds models whose stop force-killed (process.ErrForcedKill): the
+	// leaked holds models whose stop force-killed (process.ErrForcedKill, from a
+	// SwapDone, a StopProcesses, or a report taken by recordForcedStops): the
 	// process reports stopped but its upstream may still hold memory, so fits
 	// keeps charging their ceilings until the leak watcher reports the upstream
 	// gone (OnLeakGone), the model is started again (OnSwapDone), or an unload
@@ -136,6 +137,8 @@ func NewFIFO(name string, logger *logmon.Monitor, planner Swapper, cfg config.Fi
 //  2. A swap to the same model is already in flight — attach this waiter so
 //     one swap serves all callers that asked for the same model. A swap an
 //     unload cancelled is not joined: the request queues until its SwapDone.
+//     With the memory gate on, a target that is still stopping also queues,
+//     until that stop's outcome (forced or not) is known.
 //  3. Fast path — the target process is already ready, the planner sees
 //     nothing to evict, and no in-flight swap is evicting it. Hand back its
 //     ServeHTTP immediately.
@@ -146,6 +149,10 @@ func NewFIFO(name string, logger *logmon.Monitor, planner Swapper, cfg config.Fi
 //  6. Otherwise — start a new swap. This may run in parallel with other active
 //     swaps when their evict sets don't intersect.
 func (s *FIFO) OnRequest(req HandlerReq) {
+	// A forced TTL stop that finished but whose OnSelfStop has not arrived yet
+	// must be charged before anything below credits that model as freed.
+	s.recordForcedStops()
+
 	// (1) Unknown model.
 	state, ok := s.effects.ModelState(req.Model)
 	if !ok {
@@ -162,6 +169,18 @@ func (s *FIFO) OnRequest(req HandlerReq) {
 	// A cancelled swap for this model is still winding down; the request waits
 	// for its SwapDone in the queue (drainQueue then decides it afresh).
 	behindCancelled := inSwap && sw.cancelled
+	// The target is still stopping (a TTL unload, or an eviction by another
+	// swap). Whether that stop force-kills is only known once it finishes, and
+	// starting now would have EnsureReady start the model the moment the stop
+	// returns, its start command (`compose up -d`) racing a forced stop's
+	// teardown of the same container. So the request waits for the event that
+	// ends every such stop and drains the queue (OnSelfStop, OnSwapDone), which
+	// then sees a forced stop as a leak of the target. Only with the memory
+	// gate on, because only it tracks forced stops; without it EnsureReady's
+	// wait-then-start is kept. This state read only defers: every stop ends in
+	// one of those draining events, so unlike issue #946 nothing is left
+	// waiting on a start nobody will make.
+	behindOwnStop := s.pool > 0 && !inSwap && state == process.StateStopping
 	var (
 		running, evict []string
 		fastPath       bool
@@ -187,7 +206,7 @@ func (s *FIFO) OnRequest(req HandlerReq) {
 	//     would ever drain it).
 	// A load that does not fit but has something pending is admitted and
 	// queued below, waiting for that to settle.
-	memFits := joining || behindCancelled || fastPath || isAdopt(req) || s.fits(req.Model, evict, running)
+	memFits := joining || behindCancelled || behindOwnStop || fastPath || isAdopt(req) || s.fits(req.Model, evict, running)
 	if !memFits {
 		if s.neverFits(req.Model) {
 			s.logger.Debugf("%s: refusing model %s (never fits memory budget)", s.name, req.Model)
@@ -215,6 +234,12 @@ func (s *FIFO) OnRequest(req HandlerReq) {
 
 	if behindCancelled {
 		s.logger.Debugf("%s: queuing request for model %s (its cancelled swap has not finished)", s.name, req.Model)
+		s.enqueue(req)
+		return
+	}
+
+	if behindOwnStop {
+		s.logger.Debugf("%s: queuing request for model %s (it is still stopping)", s.name, req.Model)
 		s.enqueue(req)
 		return
 	}
@@ -371,6 +396,9 @@ func (s *FIFO) OnServeDone(ev ServeDoneEvent) {
 // each targeted process has exited, then drains the queue.
 func (s *FIFO) OnUnload(targets []string, timeout time.Duration) {
 	unloadErr := fmt.Errorf("%s: model unloaded", s.name)
+	// A target already stopped by an unreported forced stop becomes a leak
+	// here, so the rerun pass below releases it like any other stopped leak.
+	s.recordForcedStops()
 
 	targetSet := make(map[string]bool, len(targets))
 	for _, id := range targets {
@@ -459,18 +487,33 @@ func (s *FIFO) OnLeakGone(modelID, reason string) {
 // OnSelfStop drains the queue after a process stopped on its own: a load that
 // queued behind it (memoryPending counts a StateStopping model) may now fit, or
 // must now be refused, and nothing else would re-check it. A forced TTL stop is
-// recorded as a leak first, like a forced unload, but only while the model is
-// still stopped and no swap owns it: the report is delivered asynchronously,
-// and once the model is being started again its footprint is counted through
-// the running set and a leak entry would double-count it.
+// recorded as a leak first, like a forced unload, by drainQueue's
+// recordForcedStops, which takes the process's own forced-stop report rather
+// than trusting forced: this report is asynchronous, so by now that forced stop
+// may already be recorded (a request, unload or eviction in between took it),
+// or the model may be starting again, when its footprint is counted through the
+// running set and a leak entry would double-count it. Either way there is no
+// report left to take, so nothing is recorded twice.
 func (s *FIFO) OnSelfStop(modelID string, forced bool) {
-	if forced {
-		st, _ := s.effects.ModelState(modelID)
-		if _, inSwap := s.active[modelID]; !inSwap && st == process.StateStopped {
-			s.recordLeaks([]string{modelID})
-		}
-	}
+	s.logger.Debugf("%s: model %s stopped on its own (forced=%t)", s.name, modelID, forced)
 	s.drainQueue()
+}
+
+// recordForcedStops records a leak for every stopped model whose last stop
+// force-killed and has not been accounted for yet (Effects.TakeForcedStops),
+// so a forced TTL stop is charged from the moment it finished rather than from
+// when its OnSelfStop arrives. Models an in-flight swap is stopping or starting
+// are left to that swap's SwapDone. A no-op with the gate off.
+func (s *FIFO) recordForcedStops() {
+	if s.pool == 0 {
+		return
+	}
+	var exclude []string
+	for id, sw := range s.active {
+		exclude = append(exclude, id)
+		exclude = append(exclude, sw.evict...)
+	}
+	s.recordLeaks(s.effects.TakeForcedStops(exclude))
 }
 
 // recordLeaks marks force-killed models as still holding their ceilings and
@@ -481,6 +524,12 @@ func (s *FIFO) recordLeaks(ids []string) {
 		return
 	}
 	for _, id := range ids {
+		// Already counted: a forced stop can reach here twice (taken by
+		// recordForcedStops, then also carried by a SwapDone), and restarting
+		// the watch would add nothing.
+		if _, ok := s.leaked[id]; ok {
+			continue
+		}
 		watching := s.effects.WatchLeak(id)
 		s.leaked[id] = watching
 		if watching {
@@ -839,6 +888,9 @@ func (s *FIFO) enqueue(req HandlerReq) {
 // OnLeakGone, and on OnSelfStop (a process that stopped on its own: TTL
 // expiry, upstream crash).
 func (s *FIFO) drainQueue() {
+	// Before the empty check, so a forced TTL stop reported by OnSelfStop is
+	// recorded (and its watch started) even when nothing is queued.
+	s.recordForcedStops()
 	if len(s.queued) == 0 {
 		return
 	}
@@ -857,6 +909,12 @@ func (s *FIFO) drainQueue() {
 			}
 			s.logger.Debugf("%s: queued request for model %s now joining in-flight swap", s.name, req.Model)
 			sw.waiters = append(sw.waiters, req)
+			continue
+		}
+		// Still stopping: wait for the event that ends the stop (see
+		// behindOwnStop in OnRequest).
+		if s.pool > 0 && state == process.StateStopping {
+			remaining = append(remaining, req)
 			continue
 		}
 		running := s.runningSet(req.Model)

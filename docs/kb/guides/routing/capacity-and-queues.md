@@ -4,7 +4,7 @@ summary: Configure concurrencyLimit, globalConcurrencyLimit and memory admission
 category: guides
 tags: [routing, queue, capacity, concurrency, concurrency-limit, max-concurrent-requests, global-concurrency-limit, rate-limit, memory, memory-admission, unified-memory, oom]
 config_keys: [routing, models.*.concurrencyLimit, globalConcurrencyLimit, memoryPool, memoryReserve, models.*.memoryCeiling, models.*.runningCheck]
-updated: 2026-09-25
+updated: 2026-09-26
 ---
 
 # Routing capacity and request queues
@@ -90,6 +90,8 @@ models:
 ```
 
 This check exits non-zero only when the container is stopped or removed. The shorter `[ "$(docker inspect ...)" = true ]` would also exit non-zero when the docker daemon cannot be reached, releasing the ceiling while the container may still hold memory; the `case` above treats that as still running instead.
+
+A forced `ttl` unload counts from the moment it finishes, even when something else reaches the model first: an unload or a swap eviction that finds the model already stopped by it, or a load decided before its report arrives, treats the model as leaked. A request for a model whose `ttl` unload is still running waits for that stop to finish rather than starting the model against its own container, and if the stop was forced it waits for the leak like below.
 
 While the leak can still clear by itself, loads that need that memory queue rather than fail, and so does a request for the force-killed model itself, so it is not started against its own container while that is still being torn down. A leak that cannot (killed while loading, no `runningCheck`) gets them an immediate 503 naming it, e.g. `a=60 (leaked: force-killed, still running?) - unload a to release`. Unloading it (`curl -X POST http://localhost:8080/api/models/unload/a`) runs its `cmdStop` again and releases the ceiling if that exits 0 within `unloadTimeout`. If `cmdStop` is unset or uses `${PID}` there is nothing to re-run: stop the upstream by hand and restart llama-swap. The log shows `was force-killed; counting its ... memoryCeiling` and later `leaked model ... cleared (<reason>)`.
 
