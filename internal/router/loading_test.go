@@ -118,6 +118,41 @@ func TestLoadingWriter_SendError(t *testing.T) {
 	}
 }
 
+// TestLoadingWriter_SendErrorKeepsHTTPErrorEnvelope: an error that carries its
+// own response (a drain-time memory refusal) is framed with that response's
+// envelope, so the in-band error has the same code as the 503 it would have been
+// without the stream, not a generic 500 internal_error.
+func TestLoadingWriter_SendErrorKeepsHTTPErrorEnvelope(t *testing.T) {
+	logger := logmon.NewWriter(io.Discard)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	lw := newLoadingWriter(logger, "test-model", w, req)
+	before := w.Body.Len()
+	refusal := swaputil.MemoryAdmissionError{Message: "model \"c\" needs 80 bytes"}
+	lw.sendError(fmt.Errorf("wrapped: %w", refusal))
+	chunk := w.Body.String()[before:]
+
+	first, rest, _ := strings.Cut(chunk, "\n")
+	var msg swaputil.ErrorEnvelope
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(first, "data: ")), &msg); err != nil {
+		t.Fatalf("error frame is not a single-line JSON data field: %v (%q)", err, first)
+	}
+	var want swaputil.ErrorEnvelope
+	if err := json.Unmarshal(refusal.Body(), &want); err != nil {
+		t.Fatalf("refusal body: %v", err)
+	}
+	if msg != want {
+		t.Errorf("frame envelope = %+v, want the refusal's own %+v", msg, want)
+	}
+	if msg.Error.Code != "memory_admission" || msg.Error.Type != swaputil.ErrorTypeServer {
+		t.Errorf("code/type = %q/%q, want memory_admission/%s", msg.Error.Code, msg.Error.Type, swaputil.ErrorTypeServer)
+	}
+	if !strings.HasSuffix(strings.TrimRight(rest, "\n"), "data: [DONE]") {
+		t.Errorf("stream not terminated with [DONE]: %q", chunk)
+	}
+}
+
 // Once released, the streaming goroutine must not touch the writer — a write
 // against a finalized response panics on the recycled *bufio.Writer.
 func TestLoadingWriter_SendErrorAfterReleaseIsDropped(t *testing.T) {

@@ -73,7 +73,7 @@ fits the budget. If it does not:
   the load evicts it.
 - It queues only while such work is in progress, and is served or refused with
   the same 503 once that settles. A streaming client already receiving the
-  loading stream gets the refusal as an SSE error event followed by
+  loading stream gets the refusal as an SSE error event (the same `memory_admission` error body) followed by
   `data: [DONE]`.
 
 If stopping a model had to force-kill it (its `unloadTimeout` ran out), its
