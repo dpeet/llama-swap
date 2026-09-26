@@ -307,3 +307,28 @@ groups:
 	assert.True(t, found)
 	assert.Equal(t, "model1", realname)
 }
+
+// TestConfig_RunningCheckDockerExample: the docker runningCheck in the
+// capacity-and-queues guide parses into the intended sh -c script. POSIX-only
+// because the example is a POSIX shell command, and on Windows SanitizeCommand
+// uses Windows quoting rules, which do not treat single quotes as quotes.
+func TestConfig_RunningCheckDockerExample(t *testing.T) {
+	cfg, err := LoadConfigFromReader(strings.NewReader(`
+models:
+  docker:
+    cmd: serve
+    proxy: http://127.0.0.1:9002
+    runningCheck: sh -c 'out=$(docker inspect -f "{{.State.Running}}" big-llm 2>&1) || case "$out" in *[Nn]"o such object"*|*[Nn]"o such container"*) exit 1;; *) exit 0;; esac; [ "$out" = true ]'
+`))
+	if err != nil {
+		t.Fatalf("LoadConfigFromReader: %v", err)
+	}
+	args, err := SanitizeCommand(cfg.Models["docker"].RunningCheck)
+	if err != nil {
+		t.Fatalf("SanitizeCommand(docker example): %v", err)
+	}
+	wantScript := `out=$(docker inspect -f "{{.State.Running}}" big-llm 2>&1) || case "$out" in *[Nn]"o such object"*|*[Nn]"o such container"*) exit 1;; *) exit 0;; esac; [ "$out" = true ]`
+	if len(args) != 3 || args[0] != "sh" || args[1] != "-c" || args[2] != wantScript {
+		t.Errorf("docker example args=%q want [sh -c <script>]", args)
+	}
+}

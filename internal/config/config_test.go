@@ -1896,9 +1896,9 @@ routing:
 }
 
 // TestConfig_RunningCheck: runningCheck gets the same macro expansion as
-// cmdStop (but no deferred ${PID}: there is no process when it runs), is
-// validated at load, and the docker example in the capacity-and-queues guide
-// parses into the intended sh -c script.
+// cmdStop (but no deferred ${PID}: there is no process when it runs) and is
+// validated at load. The guide's docker example is a POSIX shell script, so its
+// parse is asserted in config_posix_test.go.
 func TestConfig_RunningCheck(t *testing.T) {
 	cfg, err := LoadConfigFromReader(strings.NewReader(`
 memoryPool: 100
@@ -1909,24 +1909,12 @@ models:
     cmd: serve
     proxy: http://127.0.0.1:9001
     runningCheck: check ${MODEL_ID} ${ctr}
-  docker:
-    cmd: serve
-    proxy: http://127.0.0.1:9002
-    runningCheck: sh -c 'out=$(docker inspect -f "{{.State.Running}}" big-llm 2>&1) || case "$out" in *[Nn]"o such object"*|*[Nn]"o such container"*) exit 1;; *) exit 0;; esac; [ "$out" = true ]'
 `))
 	if err != nil {
 		t.Fatalf("LoadConfigFromReader: %v", err)
 	}
 	if got := cfg.Models["m1"].RunningCheck; got != "check m1 vllm-main" {
 		t.Errorf("m1 runningCheck=%q want macros expanded", got)
-	}
-	args, err := SanitizeCommand(cfg.Models["docker"].RunningCheck)
-	if err != nil {
-		t.Fatalf("SanitizeCommand(docker example): %v", err)
-	}
-	wantScript := `out=$(docker inspect -f "{{.State.Running}}" big-llm 2>&1) || case "$out" in *[Nn]"o such object"*|*[Nn]"o such container"*) exit 1;; *) exit 0;; esac; [ "$out" = true ]`
-	if len(args) != 3 || args[0] != "sh" || args[1] != "-c" || args[2] != wantScript {
-		t.Errorf("docker example args=%q want [sh -c <script>]", args)
 	}
 
 	for name, check := range map[string]string{
