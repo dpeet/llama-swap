@@ -5,7 +5,7 @@
 # CLI + compose plugin, because llama-swap runs each model's cmd/cmdStop as
 # `docker compose` against the host daemon (socket mounted by
 # serve/compose.llama-swap.yaml). arm64-only: this runs on the DGX Spark (GB10).
-# See sglang-edge-probe/docs/todo/llama-swap-gb10-fork-patches.md.
+# See artisanal-inference/docs/todo/llama-swap-gb10-fork-patches.md.
 
 # --- stage 1: build the Svelte UI (embedded into the Go binary via embed_ui) ---
 FROM node:22 AS ui-builder
