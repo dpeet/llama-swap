@@ -89,7 +89,7 @@ func TestServer_ExpectContinue_ErrorStatusSurvives(t *testing.T) {
 	wantLog := fmt.Sprintf("POST /v1/audio/transcriptions HTTP/1.1\" %d ", http.StatusBadRequest)
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		logged := string(s.proxylog.GetHistory())
+		logged := string(s.logs.HttpLogs.GetHistory())
 		entries := metricsEntries(t, s.metrics)
 		if strings.Contains(logged, wantLog) && len(entries) == 1 && entries[0].RespStatusCode == http.StatusBadRequest {
 			break

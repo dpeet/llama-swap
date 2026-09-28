@@ -477,7 +477,7 @@ func (s *Server) StartAdopt() {
 			if !s.probeUpstreamHealthy(client, mc.Proxy, mc.CheckEndpoint) {
 				continue
 			}
-			s.proxylog.Infof("adopt: %s upstream already running, attaching", modelID)
+			s.logs.ProxyLogs.Infof("adopt: %s upstream already running, attaching", modelID)
 			req, err := http.NewRequestWithContext(s.shutdownCtx, http.MethodGet, "/", nil)
 			if err != nil {
 				continue
