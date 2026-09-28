@@ -258,6 +258,70 @@ func TestLogMonitor_DropsWhenSubscriberBlocked(t *testing.T) {
 	}
 }
 
+// TestLogMonitor_OnLogDataWithHistory subscribes right after writing, before
+// broadcastLoop has published those writes, and checks every write reaches the
+// client exactly once and history comes first. Many rounds, because the race
+// the method closes is only hit some of the time.
+func TestLogMonitor_OnLogDataWithHistory(t *testing.T) {
+	for round := 0; round < 200; round++ {
+		lm := NewWriter(io.Discard)
+		lm.Write([]byte("a"))
+		lm.Write([]byte("b"))
+
+		var mu sync.Mutex
+		var got []string
+		gotLive := make(chan struct{}, 10)
+		cancel := lm.OnLogDataWithHistory(func(history []byte) {
+			mu.Lock()
+			got = append(got, "history:"+string(history))
+			mu.Unlock()
+		}, func(data []byte) {
+			mu.Lock()
+			got = append(got, "live:"+string(data))
+			mu.Unlock()
+			gotLive <- struct{}{}
+		})
+		lm.Write([]byte("c"))
+
+		select {
+		case <-gotLive:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("round %d: live write never delivered", round)
+		}
+		cancel()
+
+		mu.Lock()
+		if want := []string{"history:ab", "live:c"}; strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("round %d: got %q, want %q", round, got, want)
+		}
+		mu.Unlock()
+	}
+}
+
+// TestLogMonitor_OnLogDataWithHistory_NilDiscardsHistory is the ?no-history
+// case: lines written before subscribing are dropped, even when they are
+// still waiting to be broadcast.
+func TestLogMonitor_OnLogDataWithHistory_NilDiscardsHistory(t *testing.T) {
+	for round := 0; round < 200; round++ {
+		lm := NewWriter(io.Discard)
+		lm.Write([]byte("old"))
+
+		live := make(chan string, 10)
+		cancel := lm.OnLogDataWithHistory(nil, func(data []byte) { live <- string(data) })
+		lm.Write([]byte("new"))
+
+		select {
+		case data := <-live:
+			if data != "new" {
+				t.Fatalf("round %d: first live data = %q, want %q", round, data, "new")
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("round %d: live write never delivered", round)
+		}
+		cancel()
+	}
+}
+
 func BenchmarkLogMonitorWrite(b *testing.B) {
 	smallMsg := []byte("small message\n")
 	mediumMsg := []byte(strings.Repeat("medium message content ", 10) + "\n")

@@ -16,6 +16,10 @@ const DataEventID = 0x04
 
 type DataEvent struct {
 	Data []byte
+
+	// seq is the Write's position in the stream, so OnLogDataWithHistory can
+	// tell which events its history snapshot already covers.
+	seq uint64
 }
 
 func (e DataEvent) Type() uint32 {
@@ -105,13 +109,14 @@ type Monitor struct {
 	mu       sync.RWMutex
 	buffer   *circularBuffer
 	bufferMu sync.RWMutex
+	seq      uint64 // last Write's sequence number; guarded by bufferMu
 
 	stdout io.Writer
 
 	// broadcastCh hands log data to a dedicated goroutine that owns the
 	// (backpressuring) event bus. Write performs a non-blocking send so that
 	// slow subscribers can never stall the upstream process's stdout drain.
-	broadcastCh chan []byte
+	broadcastCh chan DataEvent
 	dropped     atomic.Uint64
 
 	level      Level
@@ -128,7 +133,7 @@ func NewWriter(stdout io.Writer) *Monitor {
 		eventbus:    event.NewDispatcherConfig(1000),
 		buffer:      nil,
 		stdout:      stdout,
-		broadcastCh: make(chan []byte, 1024),
+		broadcastCh: make(chan DataEvent, 1024),
 		level:       LevelInfo,
 		prefix:      "",
 		timeFormat:  "",
@@ -147,17 +152,21 @@ func (w *Monitor) Write(p []byte) (n int, err error) {
 		return n, err
 	}
 
+	bufferCopy := make([]byte, len(p))
+	copy(bufferCopy, p)
+
+	// The hand-off happens under bufferMu so sequence numbers reach the
+	// broadcaster in order, and so OnLogDataWithHistory's snapshot sees each
+	// write in the buffer and in its seq at once. The send never blocks.
 	w.bufferMu.Lock()
+	defer w.bufferMu.Unlock()
 	if w.buffer == nil {
 		w.buffer = newCircularBuffer(BufferSize)
 	}
 	w.buffer.Write(p)
-	w.bufferMu.Unlock()
-
-	bufferCopy := make([]byte, len(p))
-	copy(bufferCopy, p)
+	w.seq++
 	select {
-	case w.broadcastCh <- bufferCopy:
+	case w.broadcastCh <- DataEvent{Data: bufferCopy, seq: w.seq}:
 	default:
 		// Subscribers (e.g. the web UI log stream) can't keep up. Drop the
 		// live broadcast rather than block: for the upstream monitor Write
@@ -193,6 +202,38 @@ func (w *Monitor) OnLogData(callback func(data []byte)) context.CancelFunc {
 	})
 }
 
+// OnLogDataWithHistory is OnLogData for a client that also wants what was
+// logged before it subscribed. The history snapshot and the subscription are
+// taken together under bufferMu, so every write lands in exactly one of them:
+// Write fills the buffer synchronously but broadcasts later from
+// broadcastLoop, so a separate GetHistory and OnLogData could send a line
+// twice, or send a line logged just before a ?no-history connect. onHistory
+// receives the snapshot (possibly empty) before callback sees any live data;
+// pass nil to discard it.
+func (w *Monitor) OnLogDataWithHistory(onHistory func(history []byte), callback func(data []byte)) context.CancelFunc {
+	historySent := make(chan struct{})
+
+	w.bufferMu.Lock()
+	var history []byte
+	if w.buffer != nil {
+		history = w.buffer.GetHistory()
+	}
+	covered := w.seq
+	cancel := event.Subscribe(w.eventbus, func(e DataEvent) {
+		<-historySent
+		if e.seq > covered {
+			callback(e.Data)
+		}
+	})
+	w.bufferMu.Unlock()
+
+	if onHistory != nil {
+		onHistory(history)
+	}
+	close(historySent)
+	return cancel
+}
+
 // broadcastLoop is the only place that publishes to the (backpressuring)
 // event bus. If subscribers are slow it blocks here, never on Write. Before
 // delivering a message it flushes any pending dropped-byte count as an
@@ -201,9 +242,11 @@ func (w *Monitor) broadcastLoop() {
 	for msg := range w.broadcastCh {
 		if dropped := w.dropped.Swap(0); dropped > 0 {
 			notice := fmt.Appendf(nil, "\n— %d bytes dropped —\n", dropped)
-			event.Publish(w.eventbus, DataEvent{Data: notice})
+			// The dropped writes precede msg, so they are history exactly
+			// when msg is.
+			event.Publish(w.eventbus, DataEvent{Data: notice, seq: msg.seq})
 		}
-		event.Publish(w.eventbus, DataEvent{Data: msg})
+		event.Publish(w.eventbus, msg)
 	}
 }
 

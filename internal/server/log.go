@@ -83,18 +83,20 @@ func (s *Server) handleLogStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, skipHistory := r.URL.Query()["no-history"]
-	if !skipHistory {
-		if history := logger.GetHistory(); len(history) != 0 {
-			w.Write(history)
-			flusher.Flush()
+	var onHistory func([]byte)
+	if _, skipHistory := r.URL.Query()["no-history"]; !skipHistory {
+		onHistory = func(history []byte) {
+			if len(history) != 0 {
+				w.Write(history)
+				flusher.Flush()
+			}
 		}
 	}
 
 	sendChan := make(chan []byte, 10)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	cancelSub := logger.OnLogData(func(data []byte) {
+	cancelSub := logger.OnLogDataWithHistory(onHistory, func(data []byte) {
 		select {
 		case sendChan <- data:
 		case <-ctx.Done():
