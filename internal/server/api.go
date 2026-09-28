@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mostlygeek/llama-swap/internal/config"
@@ -460,8 +461,9 @@ func adoptEligibleModels(models map[string]config.ModelConfig, handles func(stri
 // cmdStop, then cold-boot them. That reason holds only for models the old
 // server stops: a detachOnShutdown model's container is left running across
 // the reload, and since nothing adopts it the new server reports it Stopped
-// (and uncounted by memory admission) until a request re-attaches it. The
-// probe+attach runs in a background goroutine.
+// (and uncounted by memory admission) until a request re-attaches it. Each
+// model is probed in its own background goroutine for up to adoptProbeWindow;
+// attaches are serialized, as they were when probing was a single pass.
 func (s *Server) StartAdopt() {
 	if !s.cfg.Hooks.OnStartup.Adopt {
 		return
@@ -470,36 +472,75 @@ func (s *Server) StartAdopt() {
 	if len(eligible) == 0 {
 		return
 	}
-	go func() {
-		client := &http.Client{Timeout: 2 * time.Second}
-		for _, modelID := range eligible {
+	client := &http.Client{Timeout: 2 * time.Second}
+	var attachMu sync.Mutex
+	for _, modelID := range eligible {
+		go func() {
 			mc := s.cfg.Models[modelID]
-			if !s.probeUpstreamHealthy(client, mc.Proxy, mc.CheckEndpoint) {
-				continue
+			if !s.waitUpstreamHealthy(client, mc.Proxy, mc.CheckEndpoint, adoptProbeWindow, adoptProbeInterval) {
+				s.logs.ProxyLogs.Debugf("adopt: %s upstream not healthy within %s, not adopting", modelID, adoptProbeWindow)
+				return
 			}
-			s.logs.ProxyLogs.Infof("adopt: %s upstream already running, attaching", modelID)
-			req, err := http.NewRequestWithContext(s.shutdownCtx, http.MethodGet, "/", nil)
-			if err != nil {
-				continue
-			}
-			// "adopt" marks this so the scheduler's memory-admission gate skips it:
-			// adopt attaches to an ALREADY-RUNNING container and spends no new
-			// memory, so gating it (and 503-refusing an unsized/over-budget model)
-			// would leave a live container invisible to the ledger — the exact
-			// restart-storm under-count admission exists to prevent. Preload
-			// (startPreload) is NOT marked: it starts a model and must be gated.
-			req = req.WithContext(swaputil.SetContext(req.Context(), swaputil.ReqContextData{Model: modelID, ModelID: modelID, Metadata: map[string]string{"adopt": "1"}}))
-			// A running container makes the model's `docker compose up -d` cmd a
-			// no-op and `docker wait` attaches; the health check passes and the
-			// process becomes StateReady, so eviction planning sees it as live.
-			// The attach is a side effect of routing through EnsureReady — the
-			// probe response status is NOT a success signal (an adopted ASR/TTS
-			// model legitimately 404s GET /), so we don't gate on it. A genuine
-			// attach failure surfaces via the process's own health-check logging.
-			dw := &discardResponseWriter{status: http.StatusOK}
-			s.local.ServeHTTP(dw, req)
+			attachMu.Lock()
+			defer attachMu.Unlock()
+			s.adoptModel(modelID)
+		}()
+	}
+}
+
+// adoptProbeWindow bounds how long StartAdopt keeps probing an upstream that
+// isn't healthy yet, because after a host reboot Docker restarts a neighbor
+// container alongside llama-swap and it is still loading when the first probe
+// fires: on 2026-09-28 parakeet answered /health 29s after llama-swap began
+// listening, and the old one-shot probe silently skipped it. 10 minutes covers
+// a vLLM/sglang cold boot on the GB10 (~9.5 min).
+const (
+	adoptProbeWindow   = 10 * time.Minute
+	adoptProbeInterval = 5 * time.Second
+)
+
+// waitUpstreamHealthy probes proxy+endpoint every interval until it answers 200
+// (true), window elapses, or the server shuts down (false).
+func (s *Server) waitUpstreamHealthy(client *http.Client, proxy, endpoint string, window, interval time.Duration) bool {
+	deadline := time.Now().Add(window)
+	for {
+		if s.probeUpstreamHealthy(client, proxy, endpoint) {
+			return true
 		}
-	}()
+		if time.Now().Add(interval).After(deadline) {
+			return false
+		}
+		select {
+		case <-s.shutdownCtx.Done():
+			return false
+		case <-time.After(interval):
+		}
+	}
+}
+
+// adoptModel attaches llama-swap to modelID's already-healthy upstream.
+func (s *Server) adoptModel(modelID string) {
+	s.logs.ProxyLogs.Infof("adopt: %s upstream already running, attaching", modelID)
+	req, err := http.NewRequestWithContext(s.shutdownCtx, http.MethodGet, "/", nil)
+	if err != nil {
+		return
+	}
+	// "adopt" marks this so the scheduler's memory-admission gate skips it:
+	// adopt attaches to an ALREADY-RUNNING container and spends no new
+	// memory, so gating it (and 503-refusing an unsized/over-budget model)
+	// would leave a live container invisible to the ledger — the exact
+	// restart-storm under-count admission exists to prevent. Preload
+	// (startPreload) is NOT marked: it starts a model and must be gated.
+	req = req.WithContext(swaputil.SetContext(req.Context(), swaputil.ReqContextData{Model: modelID, ModelID: modelID, Metadata: map[string]string{"adopt": "1"}}))
+	// A running container makes the model's `docker compose up -d` cmd a
+	// no-op and `docker wait` attaches; the health check passes and the
+	// process becomes StateReady, so eviction planning sees it as live.
+	// The attach is a side effect of routing through EnsureReady — the
+	// probe response status is NOT a success signal (an adopted ASR/TTS
+	// model legitimately 404s GET /), so we don't gate on it. A genuine
+	// attach failure surfaces via the process's own health-check logging.
+	dw := &discardResponseWriter{status: http.StatusOK}
+	s.local.ServeHTTP(dw, req)
 }
 
 // probeUpstreamHealthy does a short GET to proxy+endpoint and reports a 200. It

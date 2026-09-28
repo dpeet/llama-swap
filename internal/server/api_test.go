@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -964,5 +966,61 @@ func TestServer_AdoptEligibleModels(t *testing.T) {
 	// services remain, sorted.
 	if want := "muse,parakeet"; strings.Join(got, ",") != want {
 		t.Fatalf("adoptEligibleModels = %v, want [%s]", got, want)
+	}
+}
+
+// An upstream still loading when llama-swap starts (the post-reboot race) must
+// be adopted once it turns healthy, not skipped on the first failed probe.
+func TestServer_WaitUpstreamHealthy_RetriesUntilHealthy(t *testing.T) {
+	var probes atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if probes.Add(1) < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	s := &Server{shutdownCtx: context.Background()}
+	if !s.waitUpstreamHealthy(upstream.Client(), upstream.URL, "/health", time.Second, 10*time.Millisecond) {
+		t.Fatalf("waitUpstreamHealthy = false after %d probes, want true", probes.Load())
+	}
+	if got := probes.Load(); got != 3 {
+		t.Fatalf("probes = %d, want 3", got)
+	}
+}
+
+func TestServer_WaitUpstreamHealthy_GivesUpAfterWindow(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer upstream.Close()
+
+	s := &Server{shutdownCtx: context.Background()}
+	start := time.Now()
+	if s.waitUpstreamHealthy(upstream.Client(), upstream.URL, "/health", 50*time.Millisecond, 10*time.Millisecond) {
+		t.Fatal("waitUpstreamHealthy = true for an upstream that never turns healthy")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("gave up after %s, want about the 50ms window", elapsed)
+	}
+}
+
+func TestServer_WaitUpstreamHealthy_StopsOnShutdown(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer upstream.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &Server{shutdownCtx: ctx}
+	time.AfterFunc(30*time.Millisecond, cancel)
+	start := time.Now()
+	if s.waitUpstreamHealthy(upstream.Client(), upstream.URL, "/health", time.Minute, 10*time.Millisecond) {
+		t.Fatal("waitUpstreamHealthy = true after shutdown")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("returned %s after start, want shortly after the 30ms shutdown", elapsed)
 	}
 }
