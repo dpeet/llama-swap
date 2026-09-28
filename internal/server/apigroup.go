@@ -680,14 +680,15 @@ func (s *Server) handleAPILogEvents(w http.ResponseWriter, r *http.Request) {
 
 		unsubscribe := make([]context.CancelFunc, 0, len(streams))
 		for id, log := range streams {
-			unsubscribe = append(unsubscribe, log.OnLogData(func(data []byte) { sendLogData(id, data) }))
-		}
-		if !skipHistory {
-			for id, log := range streams {
-				if history := log.GetHistory(); len(history) != 0 {
-					sendLogData(id, history)
+			var onHistory func([]byte)
+			if !skipHistory {
+				onHistory = func(history []byte) {
+					if len(history) != 0 {
+						sendLogData(id, history)
+					}
 				}
 			}
+			unsubscribe = append(unsubscribe, log.OnLogDataWithHistory(onHistory, func(data []byte) { sendLogData(id, data) }))
 		}
 		return func() { cancelAll(unsubscribe) }
 	})
