@@ -13,6 +13,12 @@ import {
   forceReleaseOffered,
   busyForLabel,
   busyTone,
+  elapsedSeconds,
+  advanceIso,
+  timeLeftText,
+  refreshDue,
+  idleBadgeShown,
+  MIN_REFRESH_AGE_MS,
 } from "./rg";
 import type { RgProfile } from "./types";
 
@@ -277,5 +283,113 @@ describe("busyTone", () => {
     expect(busyTone(undefined, now)).toBeNull();
     expect(busyTone("not a date", now)).toBeNull();
     expect(busyTone(endIn(3), "not a date")).toBeNull();
+  });
+});
+
+describe("elapsedSeconds", () => {
+  it("is the whole seconds between the fetch and now", () => {
+    expect(elapsedSeconds(1_000, 31_000)).toBe(30);
+  });
+
+  it("never goes negative, such as after a clock step back", () => {
+    expect(elapsedSeconds(31_000, 1_000)).toBe(0);
+  });
+});
+
+describe("advanceIso", () => {
+  it("moves an ISO time forward by seconds", () => {
+    expect(advanceIso("2026-09-29T12:00:00Z", 90)).toBe("2026-09-29T12:01:30.000Z");
+  });
+
+  it("passes a missing or unparsable time through as undefined", () => {
+    expect(advanceIso(undefined, 30)).toBeUndefined();
+    expect(advanceIso("not a date", 30)).toBeUndefined();
+  });
+});
+
+describe("timeLeftText", () => {
+  it("counts down from the time left at fetch", () => {
+    expect(timeLeftText(5400, 0)).toBe("1h 30m left");
+    expect(timeLeftText(5400, 1800)).toBe("1h left");
+    expect(timeLeftText(5400, 4500)).toBe("15m left");
+  });
+
+  it("floors at under a minute, then ending, never negative", () => {
+    expect(timeLeftText(100, 45)).toBe("< 1 min left");
+    expect(timeLeftText(100, 100)).toBe("ending");
+    expect(timeLeftText(100, 5000)).toBe("ending");
+    expect(timeLeftText(0, 0)).toBe("ending");
+  });
+
+  it("is null when the time left is unknown", () => {
+    expect(timeLeftText(null, 30)).toBeNull();
+  });
+});
+
+describe("countdown of the busy label and tone", () => {
+  const generatedAt = "2026-09-29T12:00:00Z";
+  const end = "2026-09-29T16:00:00Z"; // 4 h after the snapshot
+
+  it("ticks the label and tone down as time passes since the fetch", () => {
+    expect(busyForLabel(end, advanceIso(generatedAt, 0))).toBe("~4 h");
+    expect(busyTone(end, advanceIso(generatedAt, 0))).toBe("red");
+    expect(busyForLabel(end, advanceIso(generatedAt, 1800))).toBe("~3.5 h");
+    expect(busyTone(end, advanceIso(generatedAt, 1800))).toBe("orange");
+    expect(busyTone(end, advanceIso(generatedAt, 3 * 3600 + 60))).toBe("yellow");
+  });
+
+  it("floors at under 30 min once the end has passed", () => {
+    expect(busyForLabel(end, advanceIso(generatedAt, 5 * 3600))).toBe("< 30 min");
+    expect(busyTone(end, advanceIso(generatedAt, 5 * 3600))).toBe("yellow");
+  });
+});
+
+describe("holdStatus countdown", () => {
+  it("advances the time left by the elapsed seconds", () => {
+    expect(holdStatus({ state: "RUNNING", start: null, time_left_s: 5400 }, 1800)).toBe("Running · 1h left");
+    expect(holdStatus({ state: "RUNNING", start: null, time_left_s: 5400 }, 6000)).toBe("Running · ending");
+  });
+
+  it("leaves a pending hold alone", () => {
+    expect(holdStatus({ state: "PENDING", start: null, time_left_s: null }, 600)).toBe("Pending, start by unknown");
+  });
+});
+
+describe("refreshDue", () => {
+  const now = 1_000_000;
+  const base = { visible: true, inFlight: false, lastFetchAt: now - MIN_REFRESH_AGE_MS, now };
+
+  it("is due when visible, idle and the last fetch is old enough", () => {
+    expect(refreshDue(base)).toBe(true);
+    expect(refreshDue({ ...base, lastFetchAt: null })).toBe(true);
+  });
+
+  it("is not due while hidden or while a fetch is in flight", () => {
+    expect(refreshDue({ ...base, visible: false })).toBe(false);
+    expect(refreshDue({ ...base, inFlight: true })).toBe(false);
+  });
+
+  it("is not due when the last fetch is fresher than the minimum age", () => {
+    expect(refreshDue({ ...base, lastFetchAt: now - MIN_REFRESH_AGE_MS + 1 })).toBe(false);
+  });
+});
+
+describe("idleBadgeShown", () => {
+  const serving = (state: string) => ({ profile: "p", state, port: 1, error: null });
+
+  it("is hidden while a launch is in progress", () => {
+    for (const state of ["submitted", "pending", "running", "launching", "Running"]) {
+      expect(idleBadgeShown({ idle: true, serving: serving(state) })).toBe(false);
+    }
+  });
+
+  it("stays for hold-only and for serving or unhealthy holds", () => {
+    expect(idleBadgeShown({ idle: true, serving: null })).toBe(true);
+    expect(idleBadgeShown({ idle: true, serving: serving("serving") })).toBe(true);
+    expect(idleBadgeShown({ idle: true, serving: serving("unhealthy") })).toBe(true);
+  });
+
+  it("is hidden for a hold that is not idle", () => {
+    expect(idleBadgeShown({ idle: false, serving: null })).toBe(false);
   });
 });

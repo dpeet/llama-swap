@@ -137,13 +137,75 @@ export function formatClock(iso: string | null | undefined, now: Date = new Date
 }
 
 /**
+ * Whole seconds since the overview was fetched, never negative. The page ticks
+ * a "now" and advances every time-left by this, so labels count down between
+ * fetches without a request.
+ */
+export function elapsedSeconds(fetchedAtMs: number, nowMs: number): number {
+  return Math.max(0, Math.floor((nowMs - fetchedAtMs) / 1000));
+}
+
+/** An ISO time moved forward by `seconds`; undefined when missing or unparsable. */
+export function advanceIso(iso: string | null | undefined, seconds: number): string | undefined {
+  const ms = iso ? Date.parse(iso) : NaN;
+  return Number.isNaN(ms) ? undefined : new Date(ms + seconds * 1000).toISOString();
+}
+
+/**
+ * "1h 30m left", "< 1 min left" or "ending" for a hold's `time_left_s` as of
+ * the fetch, advanced by the seconds elapsed since. Never negative. Null when
+ * the time left is unknown.
+ */
+export function timeLeftText(timeLeftAtFetchS: number | null, elapsedS: number): string | null {
+  if (timeLeftAtFetchS === null) return null;
+  const left = timeLeftAtFetchS - elapsedS;
+  if (!(left > 0)) return "ending";
+  if (left < 60) return "< 1 min left";
+  return `${formatTimeLeft(left)} left`;
+}
+
+/**
  * One line for a hold: "Pending, start by 14:30" or "Running · 1h 30m left".
  * Shared by the holds list and the node cards so the wording cannot diverge.
+ * `elapsedS` counts the time left down since the overview was fetched.
  */
-export function holdStatus(hold: Pick<RgHold, "state" | "start" | "time_left_s">): string {
+export function holdStatus(hold: Pick<RgHold, "state" | "start" | "time_left_s">, elapsedS = 0): string {
   if (hold.state === "PENDING") return `Pending, start by ${formatClock(hold.start)}`;
-  const left = hold.time_left_s === null ? "" : ` · ${formatTimeLeft(hold.time_left_s)} left`;
-  return `${hold.state[0]}${hold.state.slice(1).toLowerCase()}${left}`;
+  const left = timeLeftText(hold.time_left_s, elapsedS);
+  return `${hold.state[0]}${hold.state.slice(1).toLowerCase()}${left ? ` · ${left}` : ""}`;
+}
+
+/** Serving states of a launch still in progress, which naturally has no step yet. */
+const LAUNCHING_STATES = new Set(["submitted", "pending", "running", "launching"]);
+
+/**
+ * Whether a hold shows the red "Idle" badge: idle holds only, except while its
+ * serving launch is in progress. Hold-only, serving and unhealthy holds keep it.
+ */
+export function idleBadgeShown(hold: Pick<RgHold, "idle" | "serving">): boolean {
+  if (!hold.idle) return false;
+  return !(hold.serving && LAUNCHING_STATES.has(hold.serving.state.toLowerCase()));
+}
+
+/**
+ * Background refresh runs every 2 min, and a page that turns visible refetches
+ * at once when the last fetch is at least this old. One threshold for both
+ * because a manual refresh just before a tick makes that tick redundant.
+ */
+export const REFRESH_INTERVAL_MS = 120_000;
+export const MIN_REFRESH_AGE_MS = 60_000;
+
+/**
+ * Whether a background refetch should start now: the page is visible, no fetch
+ * is in flight (fetches never overlap) and the last one is old enough.
+ * `lastFetchAt` is null before the first fetch.
+ */
+export function refreshDue(
+  state: { visible: boolean; inFlight: boolean; lastFetchAt: number | null; now: number },
+  minAgeMs: number = MIN_REFRESH_AGE_MS,
+): boolean {
+  if (!state.visible || state.inFlight) return false;
+  return state.lastFetchAt === null || state.now - state.lastFetchAt >= minAgeMs;
 }
 
 /**
