@@ -55,6 +55,39 @@ export function formatTimeLeft(seconds: number): string {
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }
 
+/**
+ * "~3 h" / "~2.5 h" for how long a busy node stays busy, measured from the
+ * overview's own snapshot time (`generated_at`) rather than the client clock,
+ * so it matches the data. Rounds half-up to 0.5 h; under 0.5 h reads
+ * "< 30 min". Null when either time is missing or unparsable.
+ */
+export function busyForLabel(endIso: string | null | undefined, nowIso: string | null | undefined): string | null {
+  const end = endIso ? Date.parse(endIso) : NaN;
+  const now = nowIso ? Date.parse(nowIso) : NaN;
+  if (Number.isNaN(end) || Number.isNaN(now)) return null;
+  const hours = (end - now) / 3_600_000;
+  if (hours < 0.5) return "< 30 min";
+  return `~${Math.floor(hours * 2 + 0.5) / 2} h`;
+}
+
+export type BusyTone = "red" | "orange" | "yellow";
+
+/**
+ * How urgent a busy node's remaining time is, for the badge color: red at
+ * 4 h or more (a long wait), orange from 1 h up to 4 h, yellow under 1 h
+ * (including an end already past). Same hours math as `busyForLabel`; null when
+ * either time is missing or unparsable, which keeps the neutral badge.
+ */
+export function busyTone(endIso: string | null | undefined, nowIso: string | null | undefined): BusyTone | null {
+  const end = endIso ? Date.parse(endIso) : NaN;
+  const now = nowIso ? Date.parse(nowIso) : NaN;
+  if (Number.isNaN(end) || Number.isNaN(now)) return null;
+  const hours = (end - now) / 3_600_000;
+  if (hours >= 4) return "red";
+  if (hours >= 1) return "orange";
+  return "yellow";
+}
+
 export interface RgFamilyOption {
   value: RgFamilyChoice;
   label: string;

@@ -212,7 +212,7 @@
 
     <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {#each overview.nodes as node (node.name)}
-        <RgNodeCard {node} reference={overview.reference} holds={holdsOn(node.name)} />
+        <RgNodeCard {node} reference={overview.reference} holds={holdsOn(node.name)} generatedAt={overview.generated_at} />
       {/each}
     </div>
 

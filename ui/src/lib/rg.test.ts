@@ -11,6 +11,8 @@ import {
   familyLabel,
   holdsUnavailable,
   forceReleaseOffered,
+  busyForLabel,
+  busyTone,
 } from "./rg";
 import type { RgProfile } from "./types";
 
@@ -208,5 +210,72 @@ describe("forceReleaseOffered", () => {
     expect(forceReleaseOffered("forbidden")).toBe(false);
     expect(forceReleaseOffered(null)).toBe(false);
     expect(forceReleaseOffered(undefined)).toBe(false);
+  });
+});
+
+describe("busyForLabel", () => {
+  const now = "2026-09-29T12:00:00Z";
+  // End time `hours` after `now`, as rg-api sends it (UTC with Z).
+  const endIn = (hours: number) => new Date(Date.parse(now) + hours * 3_600_000).toISOString();
+
+  it("shows exact hours without a trailing .0", () => {
+    expect(busyForLabel(endIn(3), now)).toBe("~3 h");
+    expect(busyForLabel(endIn(12), now)).toBe("~12 h");
+  });
+
+  it("rounds half-up to the nearest 0.5 h", () => {
+    expect(busyForLabel(endIn(2.24), now)).toBe("~2 h");
+    expect(busyForLabel(endIn(2.25), now)).toBe("~2.5 h");
+    expect(busyForLabel(endIn(2.5), now)).toBe("~2.5 h");
+    expect(busyForLabel(endIn(2.74), now)).toBe("~2.5 h");
+    expect(busyForLabel(endIn(2.75), now)).toBe("~3 h");
+    expect(busyForLabel(endIn(11.9), now)).toBe("~12 h");
+  });
+
+  it("says under 30 min when less than half an hour is left or the end has passed", () => {
+    expect(busyForLabel(endIn(0.2), now)).toBe("< 30 min");
+    expect(busyForLabel(endIn(0.49), now)).toBe("< 30 min");
+    expect(busyForLabel(endIn(-1), now)).toBe("< 30 min");
+    expect(busyForLabel(endIn(0), now)).toBe("< 30 min");
+  });
+
+  it("shows ~0.5 h from exactly half an hour", () => {
+    expect(busyForLabel(endIn(0.5), now)).toBe("~0.5 h");
+    expect(busyForLabel(endIn(0.74), now)).toBe("~0.5 h");
+  });
+
+  it("returns null for a missing or invalid end or snapshot time", () => {
+    expect(busyForLabel(null, now)).toBeNull();
+    expect(busyForLabel(undefined, now)).toBeNull();
+    expect(busyForLabel("", now)).toBeNull();
+    expect(busyForLabel("not a date", now)).toBeNull();
+    expect(busyForLabel(endIn(3), "not a date")).toBeNull();
+  });
+});
+
+describe("busyTone", () => {
+  const now = "2026-09-29T12:00:00Z";
+  const endIn = (hours: number) => new Date(Date.parse(now) + hours * 3_600_000).toISOString();
+
+  it("is red from 4 h up", () => {
+    expect(busyTone(endIn(12), now)).toBe("red");
+    expect(busyTone(endIn(4), now)).toBe("red");
+  });
+
+  it("is orange from 1 h up to just under 4 h", () => {
+    expect(busyTone(endIn(3.99), now)).toBe("orange");
+    expect(busyTone(endIn(1), now)).toBe("orange");
+  });
+
+  it("is yellow under 1 h, including an end already past", () => {
+    expect(busyTone(endIn(0.99), now)).toBe("yellow");
+    expect(busyTone(endIn(-1), now)).toBe("yellow");
+  });
+
+  it("is null for a missing or invalid end or snapshot time", () => {
+    expect(busyTone(null, now)).toBeNull();
+    expect(busyTone(undefined, now)).toBeNull();
+    expect(busyTone("not a date", now)).toBeNull();
+    expect(busyTone(endIn(3), "not a date")).toBeNull();
   });
 });
