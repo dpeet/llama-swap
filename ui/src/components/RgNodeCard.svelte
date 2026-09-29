@@ -91,7 +91,17 @@
   // The busy badge is a button that opens these rows inline, because a tooltip
   // never opens on a tap; the hover tooltip stays as the desktop shortcut.
   let busyOpen = $state(false);
-  let busyRows = $derived(nodePopoverDetails(node, busyNow));
+  // On our own node the same rows answer "is anyone queued behind me?"
+  let ourJobs = $derived(new Set(holds.map((hold) => hold.job)));
+  let busyRows = $derived(nodePopoverDetails(node, busyNow, undefined, ourJobs));
+  // The badge that opens busyRows: the occupant's time for busy/queued, "Yours" on our node.
+  let detailBadge = $derived(
+    displayState === "busy" || hasOccupant
+      ? { text: occupantLabel, variant: "outline" as const, cls: occupantTone ? toneClass[occupantTone] : undefined }
+      : displayState === "yours"
+        ? { text: badgeText.yours, variant: badgeVariant.yours, cls: undefined }
+        : null,
+  );
 </script>
 
 {#snippet busyDetails()}
@@ -150,24 +160,24 @@
         {#if displayState === "queued"}
           <Badge variant="outline" class={queuedClass}>{badgeText.queued}</Badge>
         {/if}
-        {#if displayState === "busy" || hasOccupant}
+        {#if detailBadge}
           {#if busyRows.length > 0}
             <Tooltip.Root delayDuration={150}>
               <Tooltip.Trigger
                 class="focus-visible:ring-ring/50 rounded-none text-left focus-visible:ring-[3px] focus-visible:outline-none pointer-coarse:min-h-11 pointer-coarse:flex pointer-coarse:items-center"
                 aria-expanded={busyOpen}
                 aria-controls="busy-details-{node.name}"
-                aria-label="{occupantLabel}, details for {node.name}"
+                aria-label="{detailBadge.text}, details for {node.name}"
                 onclick={() => (busyOpen = !busyOpen)}
               >
-                <Badge variant="outline" class={occupantTone ? toneClass[occupantTone] : undefined}>{occupantLabel}</Badge>
+                <Badge variant={detailBadge.variant} class={detailBadge.cls}>{detailBadge.text}</Badge>
               </Tooltip.Trigger>
               {#if !busyOpen}
                 <Tooltip.Content class="max-w-sm">{@render busyDetails()}</Tooltip.Content>
               {/if}
             </Tooltip.Root>
           {:else}
-            <Badge variant="outline" class={occupantTone ? toneClass[occupantTone] : undefined}>{occupantLabel}</Badge>
+            <Badge variant={detailBadge.variant} class={detailBadge.cls}>{detailBadge.text}</Badge>
           {/if}
         {:else if displayState !== "queued"}
           <Badge variant={badgeVariant[displayState]}>{badgeText[displayState]}</Badge>

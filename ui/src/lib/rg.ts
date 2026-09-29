@@ -308,31 +308,53 @@ export function busyTarget(
 }
 
 /**
- * Details for the node's busy/queued popover. Returns one formatted line per
- * job plus a summary of when the node is completely free.
+ * The hold a grab on this node must queue behind, as rg-hold.sh requires: our
+ * pending hold if there is one (it refuses to follow the running one past
+ * it), else our started one (RUNNING, or CONFIGURING/SUSPENDED, which rg-hold
+ * also counts as live). Null when we hold nothing on the node.
+ */
+export function followTarget(holds: Pick<RgHold, "job" | "state">[]): string | null {
+  const pending = holds.filter((hold) => hold.state === "PENDING");
+  if (pending.length > 0) return pending[pending.length - 1].job;
+  return holds[0]?.job ?? null;
+}
+
+/**
+ * Details for the node's busy/queued/yours popover. Returns one formatted line
+ * per job plus a summary of when the node is completely free. A job in
+ * `ourJobs` reads "you (hold N)" instead of the Slurm user, so a queue behind
+ * our hold is told apart from our own follow-on.
  */
 export function nodePopoverDetails(
   node: Pick<RgNode, "running" | "queue" | "free_by" | "free_by_complete">,
   busyNow: string | undefined,
   now: Date = new Date(),
+  ourJobs: ReadonlySet<string> = new Set(),
 ): string[] {
+  const who = (job: { job: string; user: string }): string => (ourJobs.has(job.job) ? `you (hold ${job.job})` : job.user);
   const rows: string[] = [];
   if (node.running) {
     const endsIn = busyForLabel(node.running.end, busyNow);
     if (endsIn) {
-      rows.push(`Running: ${node.running.user} · ends in ${endsIn}`);
+      rows.push(`Running: ${who(node.running)} · ends in ${endsIn}`);
     } else {
-      rows.push(`Running: ${node.running.user}`);
+      rows.push(`Running: ${who(node.running)}`);
     }
   }
 
   for (const q of node.queue ?? []) {
-    let text = `Queued: ${q.user}`;
+    let text = `Queued: ${who(q)}`;
     const start = q.start_by ? formatClock(q.start_by, now) : null;
     const end = q.end_by ? formatClock(q.end_by, now) : null;
     if (start && start !== "unknown") text += ` · starts by ${start}`;
     if (end && end !== "unknown") text += ` · ends by ${end}`;
     rows.push(text);
+  }
+  // On our own node, say plainly when no one else is waiting, because that is what the Yours badge is asked;
+  // "by name" because rg-api files only jobs whose ReqNodeList is exactly this node, and a partition-wide
+  // pending job can still land here (rg-hold.sh --if-free counts it).
+  if (node.running && ourJobs.has(node.running.job) && !(node.queue ?? []).some((q) => !ourJobs.has(q.job))) {
+    rows.push("Nobody else queued for this node by name (partition-wide jobs not shown)");
   }
 
   if (node.free_by) {

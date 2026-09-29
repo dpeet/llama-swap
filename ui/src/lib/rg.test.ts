@@ -25,6 +25,7 @@ import {
   busyTarget,
   busyBadgeLabel,
   nodePopoverDetails,
+  followTarget,
 } from "./rg";
 import type { RgProfile } from "./types";
 
@@ -511,6 +512,15 @@ describe("busyTarget", () => {
   });
 });
 
+describe("followTarget", () => {
+  it("follows our pending hold over the running one, else the running one", () => {
+    expect(followTarget([{ job: "1", state: "RUNNING" }, { job: "2", state: "PENDING" }])).toBe("2");
+    expect(followTarget([{ job: "1", state: "RUNNING" }])).toBe("1");
+    expect(followTarget([{ job: "1", state: "CONFIGURING" }])).toBe("1");
+    expect(followTarget([])).toBeNull();
+  });
+});
+
 describe("nodePopoverDetails", () => {
   const now = new Date("2026-09-29T12:00:00Z");
   const busyNow = now.toISOString();
@@ -530,6 +540,35 @@ describe("nodePopoverDetails", () => {
       `Queued: bob · starts by ${formatClock("2026-09-29T13:00:00Z", now)} · ends by ${formatClock("2026-09-29T14:30:00Z", now)}`,
       `Free for a new hold by ${formatClock("2026-09-29T14:30:00Z", now)} (~2.5 h, if every job runs its full limit)`,
     ]);
+  });
+
+  it("names our own jobs so a queue behind us stands out", () => {
+    const node = {
+      running: { job: "1", user: "dpeet7", end: "2026-09-29T13:00:00Z" },
+      queue: [
+        { job: "2", user: "bob", start_by: null, end_by: null },
+        { job: "3", user: "dpeet7", start_by: null, end_by: null },
+      ],
+      free_by: null,
+      free_by_complete: false,
+    };
+    const rows = nodePopoverDetails(node, busyNow, now, new Set(["1", "3"]));
+    expect(rows.slice(0, 3)).toEqual(["Running: you (hold 1) · ends in ~1 h", "Queued: bob", "Queued: you (hold 3)"]);
+  });
+
+  it("says nobody else is waiting when only our own jobs are queued on our node", () => {
+    const node = {
+      running: { job: "1", user: "dpeet7", end: "2026-09-29T13:00:00Z" },
+      queue: [{ job: "3", user: "dpeet7", start_by: null, end_by: null }],
+      free_by: null,
+      free_by_complete: false,
+    };
+    expect(nodePopoverDetails(node, busyNow, now, new Set(["1", "3"])).slice(0, 3)).toEqual([
+      "Running: you (hold 1) · ends in ~1 h",
+      "Queued: you (hold 3)",
+      "Nobody else queued for this node by name (partition-wide jobs not shown)",
+    ]);
+    expect(nodePopoverDetails(node, busyNow, now)).not.toContain("Nobody else queued for this node by name (partition-wide jobs not shown)");
   });
 
   it("uses ≥ when free_by_complete is false", () => {

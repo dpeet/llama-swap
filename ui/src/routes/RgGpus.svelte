@@ -3,7 +3,7 @@
   import { RefreshCw } from "@lucide/svelte";
   import { getRgOverview, grabRg, releaseRg, RgApiError } from "../stores/api";
   import type { RgFamilyChoice, RgGrabResponse, RgHold, RgNode, RgOverview } from "../lib/types";
-  import { canonicalDuration, familyLabel, familyOptions, forceReleaseOffered, formatClock, holdStatus, holdsUnavailable, idleBadgeShown, parseDuration, refreshDue, rgActionErrorText, advanceIso, elapsedSeconds, timeLeftText, REFRESH_INTERVAL_MS } from "../lib/rg";
+  import { canonicalDuration, familyLabel, familyOptions, followTarget, forceReleaseOffered, formatClock, holdStatus, holdsUnavailable, idleBadgeShown, parseDuration, refreshDue, rgActionErrorText, advanceIso, elapsedSeconds, timeLeftText, REFRESH_INTERVAL_MS } from "../lib/rg";
   import RgNodeCard from "../components/RgNodeCard.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
@@ -144,16 +144,29 @@
   }
   let nodeLabel = $derived(nodeChoice === BEST ? bestLabel() : nodeChoice);
 
+  // A named node where we already hold queues the grab behind that hold, because
+  // rg-hold.sh refuses a second hold there otherwise (DUPLICATE).
+  let followJob = $derived(selectedNode ? followTarget(holdsOn(selectedNode.name)) : null);
+  // Because afterany only makes a follow-on eligible, another user already queued for the node can start first.
+  let othersQueued = $derived(
+    selectedNode ? selectedNode.queue.some((entry) => !holdsOn(selectedNode.name).some((hold) => hold.job === entry.job)) : false,
+  );
+
   function onNodeChange(value: string): void {
     nodeChoice = value;
     syncFamily();
   }
 
-  function grabSummary(result: RgGrabResponse): string {
+  function grabSummary(result: RgGrabResponse, queuedAfter: string | null): string {
     const where = result.node ? ` on ${result.node}` : "";
     const what = result.profile ? ` serving ${result.profile}` : ", hold only";
     switch (result.status) {
       case "placed":
+        if (queuedAfter) {
+          const plan = result.profile ? `, to serve ${result.profile}` : ", hold only";
+          const boot = result.profile ? ", then the model boots" : "";
+          return `Hold ${result.job} queued after ${queuedAfter}${where}${plan}. It can start once ${queuedAfter} ends${boot}.`;
+        }
         return `Hold ${result.job} placed${where}${what}. It starts when Slurm schedules it.`;
       case "existing":
         return `Hold ${result.job} already exists${where}.`;
@@ -170,8 +183,9 @@
     grabbing = true;
     grabResult = null;
     try {
-      const result = await grabRg({ node: nodeChoice, family, duration: canonicalDuration(duration), caller: "page", mode: "page" });
-      grabResult = { ok: result.status !== "unverified", text: grabSummary(result) };
+      const follow = followJob;
+      const result = await grabRg({ node: nodeChoice, family, duration: canonicalDuration(duration), caller: "page", mode: "page", ...(follow ? { follow } : {}) });
+      grabResult = { ok: result.status !== "unverified", text: grabSummary(result, follow) };
     } catch (cause) {
       grabResult = { ok: false, text: rgActionErrorText(cause, "Grab failed") };
     } finally {
@@ -331,8 +345,14 @@
             </p>
           </div>
 
+          {#if followJob}
+            <p class="text-xs text-muted-foreground">
+              You have hold {followJob} on {nodeChoice}, so this queues a new hold that can start once it ends{family === "hold-only" ? "" : ", then the model boots under it"}.
+              {#if othersQueued}Someone else already queued for {nodeChoice} may start first.{/if}
+            </p>
+          {/if}
           <Button type="submit" class="w-full" disabled={grabbing || durationError !== ""}>
-            {grabbing ? "Grabbing…" : "Grab"}
+            {grabbing ? (followJob ? "Queueing…" : "Grabbing…") : followJob ? `Queue after ${followJob}` : "Grab"}
           </Button>
 
           {#if grabResult}

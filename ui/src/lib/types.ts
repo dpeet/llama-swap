@@ -567,6 +567,8 @@ export interface RgGrabRequest {
   min_ctx?: number;
   caller: string;
   mode: "page" | "warmup" | "bulk";
+  /** Our live hold on `node` to queue behind (rg-hold.sh --follow); page mode and a named node only. */
+  follow?: string;
 }
 
 export interface RgGrabResponse {
