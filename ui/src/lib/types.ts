@@ -518,8 +518,10 @@ export interface RgNode {
   availability: RgAvailability;
   slurm_state: string;
   running: { job: string; user: string; end: string } | null;
-  queue: { job: string; user: string; start_by: string | null }[];
+  queue: { job: string; user: string; start_by: string | null; end_by?: string | null }[];
   profiles: RgProfile[];
+  free_by?: string | null;
+  free_by_complete?: boolean;
 }
 
 export interface RgHoldServing {

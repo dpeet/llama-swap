@@ -22,6 +22,9 @@ import {
   startByBound,
   queuedHoldLine,
   MIN_REFRESH_AGE_MS,
+  busyTarget,
+  busyBadgeLabel,
+  nodePopoverDetails,
 } from "./rg";
 import type { RgProfile } from "./types";
 
@@ -253,6 +256,16 @@ describe("busyForLabel", () => {
     expect(busyForLabel(endIn(0.74), now)).toBe("~0.5 h");
   });
 
+  it("prefixes with ≥ instead of ~ when incomplete", () => {
+    expect(busyForLabel(endIn(3), now, true)).toBe("≥3 h");
+  });
+
+  it("says the end is unknown when incomplete and the known part is under 30 min", () => {
+    expect(busyForLabel(endIn(0.2), now, true)).toBe("end unknown");
+    expect(busyForLabel(endIn(-1), now, true)).toBe("end unknown");
+    expect(busyForLabel(endIn(0.5), now, true)).toBe("≥0.5 h");
+  });
+
   it("returns null for a missing or invalid end or snapshot time", () => {
     expect(busyForLabel(null, now)).toBeNull();
     expect(busyForLabel(undefined, now)).toBeNull();
@@ -450,6 +463,104 @@ describe("startByBound", () => {
     const start = startIn(4);
     expect(startByBound(start, advanceIso(now, 0))).toBe("≤ ~4 h");
     expect(startByBound(start, advanceIso(now, 1800))).toBe("≤ ~3.5 h");
+  });
+});
+
+describe("busyBadgeLabel", () => {
+  const now = "2026-09-29T12:00:00Z";
+  const endIn = (hours: number) => new Date(Date.parse(now) + hours * 3_600_000).toISOString();
+
+  it("reads Busy with the estimate", () => {
+    expect(busyBadgeLabel(endIn(3), now)).toBe("Busy ~3 h");
+    expect(busyBadgeLabel(endIn(3), now, true)).toBe("Busy ≥3 h");
+    expect(busyBadgeLabel(endIn(0.2), now)).toBe("Busy < 30 min");
+  });
+
+  it("reads Busy, end unknown when incomplete and under 30 min", () => {
+    expect(busyBadgeLabel(endIn(0.2), now, true)).toBe("Busy, end unknown");
+  });
+
+  it("reads plain Busy without a usable time", () => {
+    expect(busyBadgeLabel(null, now)).toBe("Busy");
+    expect(busyBadgeLabel(endIn(3), undefined)).toBe("Busy");
+  });
+});
+
+describe("busyTarget", () => {
+  const end = "2026-09-29T13:00:00Z";
+  const freeBy = "2026-09-29T16:00:00Z";
+
+  it("uses free_by when busy and available", () => {
+    const node = { running: { job: "1", user: "a", end }, free_by: freeBy, free_by_complete: false };
+    expect(busyTarget(node, "busy")).toEqual({ iso: freeBy, incomplete: true });
+  });
+
+  it("falls back to running.end when free_by is missing", () => {
+    const node = { running: { job: "1", user: "a", end }, free_by: null };
+    expect(busyTarget(node, "busy")).toEqual({ iso: end, incomplete: false });
+  });
+
+  it("uses running.end when queued, ignoring free_by", () => {
+    const node = { running: { job: "1", user: "a", end }, free_by: freeBy, free_by_complete: true };
+    expect(busyTarget(node, "queued")).toEqual({ iso: end, incomplete: false });
+  });
+
+  it("returns undefined without running or free_by", () => {
+    const node = { running: null, free_by: null };
+    expect(busyTarget(node, "busy")).toEqual({ iso: undefined, incomplete: false });
+  });
+});
+
+describe("nodePopoverDetails", () => {
+  const now = new Date("2026-09-29T12:00:00Z");
+  const busyNow = now.toISOString();
+
+  it("formats running, queued, and free_by lines", () => {
+    const node = {
+      running: { job: "1", user: "alice", end: "2026-09-29T13:00:00Z" },
+      queue: [
+        { job: "2", user: "bob", start_by: "2026-09-29T13:00:00Z", end_by: "2026-09-29T14:30:00Z" },
+      ],
+      free_by: "2026-09-29T14:30:00Z",
+      free_by_complete: true,
+    };
+    const rows = nodePopoverDetails(node, busyNow, now);
+    expect(rows).toEqual([
+      "Running: alice · ends in ~1 h",
+      `Queued: bob · starts by ${formatClock("2026-09-29T13:00:00Z", now)} · ends by ${formatClock("2026-09-29T14:30:00Z", now)}`,
+      `Free for a new hold by ${formatClock("2026-09-29T14:30:00Z", now)} (~2.5 h, if every job runs its full limit)`,
+    ]);
+  });
+
+  it("uses ≥ when free_by_complete is false", () => {
+    const node = {
+      running: null,
+      queue: [],
+      free_by: "2026-09-29T15:00:00Z",
+      free_by_complete: false,
+    };
+    const rows = nodePopoverDetails(node, busyNow, now);
+    expect(rows).toEqual([
+      `Free for a new hold no earlier than ${formatClock("2026-09-29T15:00:00Z", now)} (≥3 h, if every job runs its full limit)`,
+    ]);
+  });
+
+  it("does not claim a free time when incomplete and under 30 min", () => {
+    const node = { running: null, queue: [], free_by: "2026-09-29T12:10:00Z", free_by_complete: false };
+    expect(nodePopoverDetails(node, busyNow, now)).toEqual(["Free time unknown: some job ends are not known"]);
+  });
+
+  it("omits rows and parts that are missing", () => {
+    const node = {
+      running: { job: "1", user: "alice", end: "2026-09-29T13:00:00Z" },
+      queue: [{ job: "2", user: "bob", start_by: null }],
+      free_by: null,
+    };
+    const rows = nodePopoverDetails(node, busyNow, now);
+    expect(rows).toEqual([
+      "Running: alice · ends in ~1 h",
+      "Queued: bob",
+    ]);
   });
 });
 
