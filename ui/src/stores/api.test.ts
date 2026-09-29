@@ -8,6 +8,10 @@ import {
   fetchTailcatStatus,
   getActivity,
   getHardware,
+  getRgOverview,
+  grabRg,
+  releaseRg,
+  RgApiError,
   handleAPIEventMessage,
   hasListedModels,
   inFlightRequests,
@@ -73,6 +77,78 @@ describe("hardware api", () => {
   it("rejects unavailable hardware", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
     await expect(getHardware()).rejects.toThrow("Failed to fetch hardware: 503");
+  });
+});
+
+describe("rg api", () => {
+  const jsonResponse = (status: number, body: unknown) => ({ ok: status < 400, status, json: async () => body });
+
+  it("fetches the overview", async () => {
+    const overview = { nodes: [], holds: [], errors: [] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, overview)));
+    await expect(getRgOverview()).resolves.toEqual(overview);
+    expect(fetch).toHaveBeenCalledWith("/api/rg/overview", undefined);
+  });
+
+  it("posts a grab as JSON", async () => {
+    const placed = { status: "placed", job: "1" };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(202, placed)));
+    const req = { node: "best", family: "flash-next", duration: "2h", caller: "page", mode: "page" } as const;
+    await expect(grabRg(req)).resolves.toEqual(placed);
+    expect(fetch).toHaveBeenCalledWith("/api/rg/grab", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+  });
+
+  it("posts a release with confirm", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { ok: true })));
+    await releaseRg("165537");
+    expect(fetch).toHaveBeenCalledWith("/api/rg/release", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job: "165537", confirm: true }),
+    });
+  });
+
+  it("posts a forced release with force: true, and only when asked", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { ok: true })));
+    await releaseRg("165537", true);
+    expect(fetch).toHaveBeenCalledWith("/api/rg/release", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job: "165537", confirm: true, force: true }),
+    });
+  });
+
+  it("throws the body's detail, keeping the code", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(502, { error: "rg_api_unreachable", detail: "connection refused" })),
+    );
+    const error = await getRgOverview().catch((e) => e);
+    expect(error).toBeInstanceOf(RgApiError);
+    expect(error.message).toBe("connection refused");
+    expect(error.code).toBe("rg_api_unreachable");
+    expect(error.status).toBe(502);
+  });
+
+  it("rejects a 200 whose body is not JSON, rather than resolving to null", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => { throw new SyntaxError("Unexpected token <"); } }));
+    const error = await getRgOverview().catch((e) => e);
+    expect(error).toBeInstanceOf(RgApiError);
+    expect(error.code).toBe("bad_response");
+  });
+
+  it("falls back to the reason, then the error code, then the status", async () => {
+    const req = { node: "best", family: "27b", duration: "1h", caller: "page", mode: "page" } as const;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(409, { status: "refused", reason: "refused:NODE_NOT_FREE" })));
+    await expect(grabRg(req)).rejects.toThrow("refused:NODE_NOT_FREE");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(404, { error: "rg_api_not_configured" })));
+    await expect(getRgOverview()).rejects.toThrow("rg_api_not_configured");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => { throw new Error("not json"); } }));
+    await expect(getRgOverview()).rejects.toThrow("RG request failed: 500");
   });
 });
 
