@@ -4,7 +4,7 @@
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
-  import { formatClock, holdStatus, speedCars } from "../lib/rg";
+  import { busyForLabel, busyTone, formatClock, holdStatus, speedCars, type BusyTone } from "../lib/rg";
   import type { RgAvailability, RgFamily, RgHold, RgNode } from "../lib/types";
 
   interface Props {
@@ -13,9 +13,11 @@
     reference: Record<RgFamily, number>;
     /** Our holds on this node. */
     holds: RgHold[];
+    /** The overview's `generated_at`, the "now" for the busy-for estimate. */
+    generatedAt?: string;
   }
 
-  let { node, reference, holds }: Props = $props();
+  let { node, reference, holds, generatedAt }: Props = $props();
 
   // The default profile sets the card's headline speed; the info box lists
   // every profile.
@@ -42,6 +44,28 @@
     unavailable: "destructive",
     unknown: "outline",
   };
+
+  // Only a node someone else holds says how long; "ours" keeps the hold lines
+  // below, and a missing end or snapshot time leaves the plain "Busy".
+  let badgeLabel = $derived.by(() => {
+    const base = badgeText[node.availability];
+    if (node.availability !== "busy") return base;
+    const busyFor = busyForLabel(node.running?.end, generatedAt);
+    return busyFor ? `${base} ${busyFor}` : base;
+  });
+
+  // Tinted like the Release button (destructive/10 light, /20 dark), but with
+  // a deeper light-mode and paler dark-mode text than `text-destructive`,
+  // because that measures APCA Lc 58 / -42 on its own tint, under the 60 floor
+  // for labels. Measured on a default-theme card: red 67/-77, orange 67/-67,
+  // yellow 69/-81 (light/dark).
+  const toneClass: Record<BusyTone, string> = {
+    red: "border-transparent bg-destructive/10 text-red-700 dark:bg-destructive/20 dark:text-red-200",
+    orange: "border-transparent bg-orange-500/10 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300",
+    yellow: "border-transparent bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-300",
+  };
+  // Null (unknown end) keeps the neutral outline badge.
+  let badgeTone = $derived(node.availability === "busy" ? busyTone(node.running?.end, generatedAt) : null);
 
   function ratioText(ratio: number): string {
     return `≈${ratio >= 10 ? ratio.toFixed(0) : ratio.toFixed(1).replace(/\.0$/, "")}× DGX`;
@@ -94,7 +118,7 @@
         <div class="truncate font-semibold">{node.gpu}</div>
         <div class="text-muted-foreground truncate font-mono text-xs">{node.name}</div>
       </div>
-      <Badge variant={badgeVariant[node.availability]}>{badgeText[node.availability]}</Badge>
+      <Badge variant={badgeVariant[node.availability]} class={badgeTone ? toneClass[badgeTone] : undefined}>{badgeLabel}</Badge>
     </div>
 
     <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
