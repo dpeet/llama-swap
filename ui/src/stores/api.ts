@@ -15,6 +15,9 @@ import type {
   PlaygroundModelType,
   HardwareSnapshot,
   TailcatStatus,
+  RgOverview,
+  RgGrabRequest,
+  RgGrabResponse,
 } from "../lib/types";
 import { appendActivityFilters, type ActivityFilters } from "../lib/activityFilters";
 import { connectionState } from "./theme";
@@ -496,4 +499,57 @@ export async function getHardware(): Promise<HardwareSnapshot> {
     throw new Error(`Failed to fetch hardware: ${response.status}`);
   }
   return await response.json() as HardwareSnapshot;
+}
+
+/** A non-2xx answer from /api/rg/*, carrying rg-api's (or llama-swap's proxy's) error code. */
+export class RgApiError extends Error {
+  constructor(
+    message: string,
+    /** `error` or `reason` from the body, e.g. rg_api_not_configured, rg_api_unreachable, refused:NODE_NOT_FREE. */
+    readonly code: string | null,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "RgApiError";
+  }
+}
+
+async function rgRequest<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(
+    path,
+    body === undefined
+      ? undefined
+      : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+  );
+  // Read the body either way: rg-api answers 409 grabs with a full response
+  // object whose `reason`/`detail` explain the refusal.
+  let data: Record<string, unknown> | null = null;
+  try {
+    data = (await response.json()) as Record<string, unknown>;
+  } catch {
+    data = null;
+  }
+  if (!response.ok) {
+    const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
+    const detail = text(data?.detail);
+    const reason = text(data?.reason);
+    const code = text(data?.error) ?? reason;
+    throw new RgApiError(detail ?? reason ?? code ?? `RG request failed: ${response.status}`, code, response.status);
+  }
+  // A 2xx that is not JSON (e.g. an HTML page from a proxy in front) would
+  // otherwise resolve to null and leave the page on "Loading".
+  if (data === null) throw new RgApiError("rg-api answered without a JSON body", "bad_response", response.status);
+  return data as T;
+}
+
+export async function getRgOverview(): Promise<RgOverview> {
+  return await rgRequest<RgOverview>("/api/rg/overview");
+}
+
+export async function grabRg(req: RgGrabRequest): Promise<RgGrabResponse> {
+  return await rgRequest<RgGrabResponse>("/api/rg/grab", req);
+}
+
+export async function releaseRg(job: string, force = false): Promise<void> {
+  await rgRequest<unknown>("/api/rg/release", force ? { job, confirm: true, force: true } : { job, confirm: true });
 }

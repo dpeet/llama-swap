@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -70,6 +71,10 @@ type Server struct {
 
 	local router.LocalRouter
 	peer  router.Router
+
+	// rgProxy fronts rg-api for the RG GPUs page. Nil when
+	// LLAMA_SWAP_RG_API_URL is unset, in which case /api/rg/* answers 404.
+	rgProxy http.Handler
 
 	mux     *http.ServeMux
 	handler http.Handler
@@ -231,6 +236,14 @@ func New(cfg config.Config, logs *logmon.Group, perfMon *perf.Monitor, st store.
 		return nil, fmt.Errorf("store is required")
 	}
 
+	var rgProxy http.Handler
+	if target := os.Getenv(rgAPIURLEnv); target != "" {
+		rgProxy, err = newRGProxy(target, logs.ProxyLogs)
+		if err != nil {
+			return nil, fmt.Errorf("creating rg-api proxy: %w", err)
+		}
+	}
+
 	shutdownCtx, shutdownFn := context.WithCancel(context.Background())
 	s := &Server{
 		cfg:           cfg,
@@ -245,6 +258,7 @@ func New(cfg config.Config, logs *logmon.Group, perfMon *perf.Monitor, st store.
 		activeProfile: cfg.Hooks.OnStartup.Profile,
 		local:         local,
 		peer:          peer,
+		rgProxy:       rgProxy,
 		shutdownCtx:   shutdownCtx,
 		shutdownFn:    shutdownFn,
 	}
@@ -412,6 +426,8 @@ func (s *Server) routes() {
 	mux.Handle("GET /api/hardware", apiChain.ThenFunc(s.handleAPIHardware))
 	mux.Handle("GET /api/tailcat", apiChain.ThenFunc(s.handleAPITailcat))
 	mux.Handle("GET /api/captures/{id}", apiChain.ThenFunc(s.handleAPICapture))
+	// Rogues Gallery GPU daemon (rg-api), proxied for the RG GPUs page.
+	mux.Handle("/api/rg/{rgPath...}", apiChain.ThenFunc(s.handleRG))
 
 	// Stateless MCP server exposing llama-swap's own documentation as tools,
 	// consumed by the Playground's agentic chat and by any external MCP client.

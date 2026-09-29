@@ -488,3 +488,94 @@ export interface SpeechGenerationRequest {
   input: string;
   voice: string;
 }
+
+// Rogues Gallery GPUs (rg-api, proxied at /api/rg/*). The overview shape is
+// documented in artisanal-inference docs/todo/rg-on-demand.md "rg-api endpoints".
+
+export type RgFamily = "flash-next" | "27b";
+export type RgAvailability = "free" | "busy" | "ours" | "unavailable" | "unknown";
+
+export interface RgProfile {
+  id: string;
+  family: RgFamily;
+  label: string;
+  tok_s: number;
+  speedup: number;
+  ctx_limit: number;
+  default: boolean;
+}
+
+export interface RgNode {
+  name: string;
+  gpu: string;
+  memory_gb: number;
+  arch: string;
+  cpus: number;
+  host_ram_gb: number;
+  runtime: string;
+  partition: string;
+  max_time: string;
+  availability: RgAvailability;
+  slurm_state: string;
+  running: { job: string; user: string; end: string } | null;
+  queue: { job: string; user: string; start_by: string | null }[];
+  profiles: RgProfile[];
+}
+
+export interface RgHoldServing {
+  profile: string;
+  state: string;
+  port: number;
+  error: string | null;
+}
+
+export interface RgHold {
+  job: string;
+  node: string;
+  state: "PENDING" | "RUNNING" | string;
+  /** Slurm's start estimate while PENDING, the actual start once RUNNING. */
+  start: string | null;
+  end: string | null;
+  time_left_s: number | null;
+  idle: boolean;
+  comment: string;
+  serving: RgHoldServing | null;
+}
+
+export interface RgOverview {
+  generated_at: string;
+  /** DGX short-decode tok/s per family, the denominator for the speed cars. */
+  reference: Record<RgFamily, number>;
+  nodes: RgNode[];
+  /** Idle node with the highest measured tok/s per family, null when none is idle. */
+  best: Record<RgFamily, string | null>;
+  holds: RgHold[];
+  /** One entry per source rg-api failed to read, e.g. "availability: ssh exit 255". */
+  errors: string[];
+}
+
+export type RgFamilyChoice = RgFamily | "hold-only";
+
+export interface RgGrabRequest {
+  /** "best" or a catalog node name. */
+  node: string;
+  family: RgFamilyChoice;
+  /** Text such as "2h", "90m" or "1h30m". */
+  duration: string;
+  min_ctx?: number;
+  caller: string;
+  mode: "page" | "warmup" | "bulk";
+}
+
+export interface RgGrabResponse {
+  status: "placed" | "unverified" | "existing" | "fallback" | "refused";
+  job: string | null;
+  node: string | null;
+  profile: string | null;
+  model: string | null;
+  ctx_limit: number | null;
+  hold_ends_at: string | null;
+  state: string | null;
+  reason: string | null;
+  detail: string | null;
+}
