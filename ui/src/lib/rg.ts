@@ -55,19 +55,32 @@ export function formatTimeLeft(seconds: number): string {
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }
 
+/** What `busyForLabel` says for an incomplete estimate whose known part is under 30 min. */
+export const END_UNKNOWN = "end unknown";
+
 /**
  * "~3 h" / "~2.5 h" for how long a busy node stays busy, measured from the
  * overview's own snapshot time (`generated_at`) rather than the client clock,
  * so it matches the data. Rounds half-up to 0.5 h; under 0.5 h reads
  * "< 30 min". Null when either time is missing or unparsable.
+ * If `incomplete` (some job's end is unknown, so `endIso` is only a lower
+ * bound), prefixes with "≥" instead of "~", and under 30 min reads
+ * "end unknown" because "≥ 0 min" says nothing.
  */
-export function busyForLabel(endIso: string | null | undefined, nowIso: string | null | undefined): string | null {
+export function busyForLabel(endIso: string | null | undefined, nowIso: string | null | undefined, incomplete: boolean = false): string | null {
   const end = endIso ? Date.parse(endIso) : NaN;
   const now = nowIso ? Date.parse(nowIso) : NaN;
   if (Number.isNaN(end) || Number.isNaN(now)) return null;
   const hours = (end - now) / 3_600_000;
-  if (hours < 0.5) return "< 30 min";
-  return `~${Math.floor(hours * 2 + 0.5) / 2} h`;
+  if (hours < 0.5) return incomplete ? END_UNKNOWN : "< 30 min";
+  return `${incomplete ? "≥" : "~"}${Math.floor(hours * 2 + 0.5) / 2} h`;
+}
+
+/** The busy badge text: "Busy ~3 h", "Busy ≥3 h", "Busy, end unknown", or plain "Busy" without a usable time. */
+export function busyBadgeLabel(endIso: string | null | undefined, nowIso: string | null | undefined, incomplete: boolean = false): string {
+  const label = busyForLabel(endIso, nowIso, incomplete);
+  if (!label) return "Busy";
+  return label === END_UNKNOWN ? `Busy, ${END_UNKNOWN}` : `Busy ${label}`;
 }
 
 export type BusyTone = "red" | "orange" | "yellow";
@@ -276,4 +289,64 @@ export function rgActionErrorText(cause: unknown, fallback: string): string {
  */
 export function forceReleaseOffered(code: string | null | undefined): boolean {
   return code === "down_failed" || code === "launch_in_progress" || code === "terminal_session";
+}
+
+/**
+ * Resolves the time to count down to for the busy label/tone.
+ * When the node is "busy" (or "ours" but running other jobs), it uses `free_by` if
+ * available, falling back to `running.end`. For a "queued" node, it always uses
+ * `running.end` because our pending hold will start then.
+ */
+export function busyTarget(
+  node: Pick<RgNode, "running" | "free_by" | "free_by_complete">,
+  displayState: NodeDisplayState
+): { iso: string | null | undefined; incomplete: boolean } {
+  if (displayState === "busy" && node.free_by) {
+    return { iso: node.free_by, incomplete: !node.free_by_complete };
+  }
+  return { iso: node.running?.end, incomplete: false };
+}
+
+/**
+ * Details for the node's busy/queued popover. Returns one formatted line per
+ * job plus a summary of when the node is completely free.
+ */
+export function nodePopoverDetails(
+  node: Pick<RgNode, "running" | "queue" | "free_by" | "free_by_complete">,
+  busyNow: string | undefined,
+  now: Date = new Date(),
+): string[] {
+  const rows: string[] = [];
+  if (node.running) {
+    const endsIn = busyForLabel(node.running.end, busyNow);
+    if (endsIn) {
+      rows.push(`Running: ${node.running.user} · ends in ${endsIn}`);
+    } else {
+      rows.push(`Running: ${node.running.user}`);
+    }
+  }
+
+  for (const q of node.queue ?? []) {
+    let text = `Queued: ${q.user}`;
+    const start = q.start_by ? formatClock(q.start_by, now) : null;
+    const end = q.end_by ? formatClock(q.end_by, now) : null;
+    if (start && start !== "unknown") text += ` · starts by ${start}`;
+    if (end && end !== "unknown") text += ` · ends by ${end}`;
+    rows.push(text);
+  }
+
+  if (node.free_by) {
+    const incomplete = !node.free_by_complete;
+    const clock = formatClock(node.free_by, now);
+    const endsIn = busyForLabel(node.free_by, busyNow, incomplete);
+    if (endsIn === END_UNKNOWN) {
+      rows.push("Free time unknown: some job ends are not known");
+    } else if (clock !== "unknown" && endsIn) {
+      // Incomplete: free_by covers only the jobs with a known end, so it is a floor, not a promise.
+      const lead = incomplete ? "Free for a new hold no earlier than" : "Free for a new hold by";
+      rows.push(`${lead} ${clock} (${endsIn}, if every job runs its full limit)`);
+    }
+  }
+
+  return rows;
 }

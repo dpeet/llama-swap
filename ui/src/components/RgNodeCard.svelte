@@ -4,7 +4,7 @@
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
-  import { advanceIso, busyForLabel, busyTone, formatClock, holdStatus, nodeDisplayState, queuedHoldLine, speedCars, type BusyTone, type NodeDisplayState } from "../lib/rg";
+  import { advanceIso, busyBadgeLabel, busyTarget, busyTone, formatClock, holdStatus, nodeDisplayState, nodePopoverDetails, queuedHoldLine, speedCars, type BusyTone, type NodeDisplayState } from "../lib/rg";
   import type { RgFamily, RgHold, RgNode } from "../lib/types";
 
   interface Props {
@@ -63,10 +63,8 @@
   // occupant label when the overview has no `running`. A missing end or
   // snapshot time leaves the plain "Busy".
   let hasOccupant = $derived(displayState === "busy" || (displayState === "queued" && node.running != null));
-  let occupantLabel = $derived.by(() => {
-    const busyFor = busyForLabel(node.running?.end, busyNow);
-    return busyFor ? `${badgeText.busy} ${busyFor}` : badgeText.busy;
-  });
+  let target = $derived(busyTarget(node, displayState));
+  let occupantLabel = $derived(busyBadgeLabel(target.iso, busyNow, target.incomplete));
 
   // Tinted like the Release button (destructive/10 light, /20 dark), but with
   // a deeper light-mode and paler dark-mode text than `text-destructive`,
@@ -82,14 +80,27 @@
   // Blue, so "Queued" is neither the teal "Yours" nor one of the busy tones.
   const queuedClass = "border-transparent bg-sky-500/10 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300";
   // Null (unknown end) keeps the neutral outline badge.
-  let occupantTone = $derived(hasOccupant ? busyTone(node.running?.end, busyNow) : null);
+  let occupantTone = $derived(hasOccupant ? busyTone(target.iso, busyNow) : null);
 
   function ratioText(ratio: number): string {
     return `≈${ratio >= 10 ? ratio.toFixed(0) : ratio.toFixed(1).replace(/\.0$/, "")}× DGX`;
   }
 
   let expanded = $state(false);
+
+  // The busy badge is a button that opens these rows inline, because a tooltip
+  // never opens on a tap; the hover tooltip stays as the desktop shortcut.
+  let busyOpen = $state(false);
+  let busyRows = $derived(nodePopoverDetails(node, busyNow));
 </script>
+
+{#snippet busyDetails()}
+  <div class="flex flex-col gap-1 text-xs">
+    {#each busyRows as row}
+      <div>{row}</div>
+    {/each}
+  </div>
+{/snippet}
 
 {#snippet details()}
   <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
@@ -140,12 +151,35 @@
           <Badge variant="outline" class={queuedClass}>{badgeText.queued}</Badge>
         {/if}
         {#if displayState === "busy" || hasOccupant}
-          <Badge variant="outline" class={occupantTone ? toneClass[occupantTone] : undefined}>{occupantLabel}</Badge>
+          {#if busyRows.length > 0}
+            <Tooltip.Root delayDuration={150}>
+              <Tooltip.Trigger
+                class="focus-visible:ring-ring/50 rounded-none text-left focus-visible:ring-[3px] focus-visible:outline-none pointer-coarse:min-h-11 pointer-coarse:flex pointer-coarse:items-center"
+                aria-expanded={busyOpen}
+                aria-controls="busy-details-{node.name}"
+                aria-label="{occupantLabel}, details for {node.name}"
+                onclick={() => (busyOpen = !busyOpen)}
+              >
+                <Badge variant="outline" class={occupantTone ? toneClass[occupantTone] : undefined}>{occupantLabel}</Badge>
+              </Tooltip.Trigger>
+              {#if !busyOpen}
+                <Tooltip.Content class="max-w-sm">{@render busyDetails()}</Tooltip.Content>
+              {/if}
+            </Tooltip.Root>
+          {:else}
+            <Badge variant="outline" class={occupantTone ? toneClass[occupantTone] : undefined}>{occupantLabel}</Badge>
+          {/if}
         {:else if displayState !== "queued"}
           <Badge variant={badgeVariant[displayState]}>{badgeText[displayState]}</Badge>
         {/if}
       </div>
     </div>
+
+    {#if busyOpen && busyRows.length > 0}
+      <div id="busy-details-{node.name}" class="bg-muted/50 p-2">
+        {@render busyDetails()}
+      </div>
+    {/if}
 
     <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <span class="text-lg font-semibold">{node.memory_gb} GB</span>
