@@ -18,6 +18,9 @@ import {
   timeLeftText,
   refreshDue,
   idleBadgeShown,
+  nodeDisplayState,
+  startByBound,
+  queuedHoldLine,
   MIN_REFRESH_AGE_MS,
 } from "./rg";
 import type { RgProfile } from "./types";
@@ -391,5 +394,93 @@ describe("idleBadgeShown", () => {
 
   it("is hidden for a hold that is not idle", () => {
     expect(idleBadgeShown({ idle: false, serving: null })).toBe(false);
+  });
+});
+
+describe("nodeDisplayState", () => {
+  const pending = { state: "PENDING" };
+  const running = { state: "RUNNING" };
+
+  it("maps the other availabilities straight through", () => {
+    expect(nodeDisplayState("free", [])).toBe("free");
+    expect(nodeDisplayState("busy", [])).toBe("busy");
+    expect(nodeDisplayState("unavailable", [])).toBe("unavailable");
+    expect(nodeDisplayState("unknown", [])).toBe("unknown");
+  });
+
+  it("is queued when ours only because our hold is pending", () => {
+    expect(nodeDisplayState("ours", [pending])).toBe("queued");
+  });
+
+  it("is yours when our hold is running, even with another pending", () => {
+    expect(nodeDisplayState("ours", [running])).toBe("yours");
+    expect(nodeDisplayState("ours", [pending, running])).toBe("yours");
+  });
+
+  it("stays yours when no hold is listed, because the hold list may have failed", () => {
+    expect(nodeDisplayState("ours", [])).toBe("yours");
+  });
+
+  it("ignores holds unless availability says ours", () => {
+    expect(nodeDisplayState("busy", [pending])).toBe("busy");
+  });
+});
+
+describe("startByBound", () => {
+  const now = "2026-09-29T12:00:00Z";
+  const startIn = (hours: number) => new Date(Date.parse(now) + hours * 3_600_000).toISOString();
+
+  it("marks busyForLabel's rounded hours as an upper bound", () => {
+    expect(startByBound(startIn(3), now)).toBe("≤ ~3 h");
+    expect(startByBound(startIn(2.6), now)).toBe("≤ ~2.5 h");
+  });
+
+  it("reads under 30 min, also once the estimate has passed", () => {
+    expect(startByBound(startIn(0.2), now)).toBe("≤ 30 min");
+    expect(startByBound(startIn(-1), now)).toBe("≤ 30 min");
+  });
+
+  it("is null when a time is missing or unparsable", () => {
+    expect(startByBound(null, now)).toBeNull();
+    expect(startByBound("garbage", now)).toBeNull();
+    expect(startByBound(startIn(3), undefined)).toBeNull();
+  });
+
+  it("counts down with the tick", () => {
+    const start = startIn(4);
+    expect(startByBound(start, advanceIso(now, 0))).toBe("≤ ~4 h");
+    expect(startByBound(start, advanceIso(now, 1800))).toBe("≤ ~3.5 h");
+  });
+});
+
+describe("queuedHoldLine", () => {
+  const now = "2026-09-29T12:00:00Z";
+  const start = "2026-09-29T15:00:00Z";
+
+  it("gives the start-by time and its upper bound", () => {
+    expect(queuedHoldLine({ start }, now)).toBe(`queued · start by ${formatClock(start)} (≤ ~3 h)`);
+  });
+
+  it("drops the bound when it cannot be computed", () => {
+    expect(queuedHoldLine({ start }, undefined)).toBe(`queued · start by ${formatClock(start)}`);
+  });
+
+  it("says so when Slurm gave no estimate", () => {
+    expect(queuedHoldLine({ start: null }, now)).toBe("queued · no start estimate");
+  });
+});
+
+describe("holdStatus start-by bound", () => {
+  const now = "2026-09-29T12:00:00Z";
+  const start = "2026-09-29T15:00:00Z";
+
+  it("adds the upper bound to a pending hold when now is given", () => {
+    expect(holdStatus({ state: "PENDING", start, time_left_s: null }, 0, now)).toBe(
+      `Pending, start by ${formatClock(start)} (≤ ~3 h)`,
+    );
+  });
+
+  it("leaves a running hold alone", () => {
+    expect(holdStatus({ state: "RUNNING", start, time_left_s: 5400 }, 0, now)).toBe("Running · 1h 30m left");
   });
 });
