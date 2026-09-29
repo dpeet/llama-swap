@@ -4,7 +4,7 @@
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
-  import { busyForLabel, busyTone, formatClock, holdStatus, speedCars, type BusyTone } from "../lib/rg";
+  import { advanceIso, busyForLabel, busyTone, formatClock, holdStatus, speedCars, type BusyTone } from "../lib/rg";
   import type { RgAvailability, RgFamily, RgHold, RgNode } from "../lib/types";
 
   interface Props {
@@ -15,9 +15,14 @@
     holds: RgHold[];
     /** The overview's `generated_at`, the "now" for the busy-for estimate. */
     generatedAt?: string;
+    /** Seconds since the overview was fetched; advances every time-left, no request. */
+    elapsedS?: number;
   }
 
-  let { node, reference, holds, generatedAt }: Props = $props();
+  let { node, reference, holds, generatedAt, elapsedS = 0 }: Props = $props();
+
+  // The snapshot time advanced to now, so the busy label and tone count down.
+  let busyNow = $derived(advanceIso(generatedAt, elapsedS));
 
   // The default profile sets the card's headline speed; the info box lists
   // every profile.
@@ -50,7 +55,7 @@
   let badgeLabel = $derived.by(() => {
     const base = badgeText[node.availability];
     if (node.availability !== "busy") return base;
-    const busyFor = busyForLabel(node.running?.end, generatedAt);
+    const busyFor = busyForLabel(node.running?.end, busyNow);
     return busyFor ? `${base} ${busyFor}` : base;
   });
 
@@ -65,7 +70,7 @@
     yellow: "border-transparent bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-300",
   };
   // Null (unknown end) keeps the neutral outline badge.
-  let badgeTone = $derived(node.availability === "busy" ? busyTone(node.running?.end, generatedAt) : null);
+  let badgeTone = $derived(node.availability === "busy" ? busyTone(node.running?.end, busyNow) : null);
 
   function ratioText(ratio: number): string {
     return `≈${ratio >= 10 ? ratio.toFixed(0) : ratio.toFixed(1).replace(/\.0$/, "")}× DGX`;
@@ -124,8 +129,10 @@
     <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <span class="text-lg font-semibold">{node.memory_gb} GB</span>
       {#if headline}
-        <span class="flex items-baseline gap-1.5" title="Default profile, relative to the DGX">
-          <span role="img" aria-label={ratioText(headline.ratio)} class="tracking-tight">
+        <span class="flex flex-wrap items-baseline gap-x-2" title="Default profile, relative to the DGX">
+          <!-- text-xl plus tracking-wider, because the old tracking-tight overlapped the red
+               cars into an unreadable smudge on desktop dark mode; wraps below the text on a narrow card. -->
+          <span role="img" aria-label={ratioText(headline.ratio)} class="text-xl leading-none tracking-wider whitespace-nowrap">
             {car.repeat(headline.count)}
           </span>
           <span class="text-muted-foreground text-xs">{ratioText(headline.ratio)}</span>
@@ -134,7 +141,7 @@
     </div>
 
     {#each holds as hold (hold.job)}
-      <div class="text-xs">Your hold {hold.job}: {holdStatus(hold)}</div>
+      <div class="text-xs">Your hold {hold.job}: {holdStatus(hold, elapsedS)}</div>
     {/each}
 
     <Collapsible.Root open={expanded}>

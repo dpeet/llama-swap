@@ -3,7 +3,7 @@
   import { RefreshCw } from "@lucide/svelte";
   import { getRgOverview, grabRg, releaseRg, RgApiError } from "../stores/api";
   import type { RgFamilyChoice, RgGrabResponse, RgHold, RgNode, RgOverview } from "../lib/types";
-  import { canonicalDuration, familyLabel, familyOptions, forceReleaseOffered, formatClock, formatTimeLeft, holdStatus, holdsUnavailable, parseDuration, rgActionErrorText } from "../lib/rg";
+  import { canonicalDuration, familyLabel, familyOptions, forceReleaseOffered, formatClock, holdStatus, holdsUnavailable, idleBadgeShown, parseDuration, refreshDue, rgActionErrorText, elapsedSeconds, timeLeftText, REFRESH_INTERVAL_MS } from "../lib/rg";
   import RgNodeCard from "../components/RgNodeCard.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
@@ -12,28 +12,75 @@
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
 
-  // The overview is fetched on navigation, on the refresh button, and once
-  // after a grab or release. There is no timer, because the Slack start alert
-  // (not this page) says a hold came up.
+  // D35 (2026-09-29): the overview is fetched on navigation, on the refresh
+  // button, once after a grab or release, and every 2 min while the tab is
+  // visible. Between fetches a 30 s tick only re-renders the time-left labels
+  // (no request), advancing the last overview by the time since it was fetched.
   let overview = $state<RgOverview | null>(null);
   let loading = $state(true);
   let error = $state<RgApiError | Error | null>(null);
 
+  const COUNTDOWN_TICK_MS = 30_000;
+  // Client clock of the last successful fetch, and the ticking "now". Elapsed
+  // time is client-vs-client, so a skewed server clock cannot distort the countdown.
+  let fetchedAt = $state<number | null>(null);
+  let now = $state(Date.now());
+  let elapsedS = $derived(fetchedAt === null ? 0 : elapsedSeconds(fetchedAt, now));
+
+  // Plain flags, not $state: they gate fetches and drive no rendering.
+  let inFlight = false;
+  let reloadQueued = false;
+  let lastAttemptAt: number | null = null;
+
+  // Never overlaps two fetches: a request made while one is in flight (a grab's
+  // refresh, a manual refresh) is queued and runs once when it lands, so the
+  // page never keeps a response that predates the action.
   async function load(): Promise<void> {
+    if (inFlight) {
+      reloadQueued = true;
+      return;
+    }
+    inFlight = true;
     loading = true;
+    lastAttemptAt = Date.now();
     try {
       overview = await getRgOverview();
+      fetchedAt = Date.now();
+      now = fetchedAt;
       error = null;
       syncFamily();
     } catch (cause) {
       error = cause instanceof Error ? cause : new Error(String(cause));
     } finally {
+      inFlight = false;
       loading = false;
+      if (reloadQueued) {
+        reloadQueued = false;
+        void load();
+      }
+    }
+  }
+
+  // lastAttemptAt, not fetchedAt, so a failing rg-api is retried every 2 min
+  // rather than on every visibility flip.
+  function refreshIfDue(): void {
+    now = Date.now();
+    if (refreshDue({ visible: document.visibilityState === "visible", inFlight, lastFetchAt: lastAttemptAt, now })) {
+      void load();
     }
   }
 
   onMount(() => {
     void load();
+    const countdown = setInterval(() => (now = Date.now()), COUNTDOWN_TICK_MS);
+    const refresh = setInterval(refreshIfDue, REFRESH_INTERVAL_MS);
+    // Timers are throttled in hidden tabs, so catch up on return.
+    document.addEventListener("visibilitychange", refreshIfDue);
+    return () => {
+      clearInterval(countdown);
+      clearInterval(refresh);
+      document.removeEventListener("visibilitychange", refreshIfDue);
+    };
   });
 
   let errorTitle = $derived.by(() => {
@@ -180,7 +227,7 @@
     <div>
       <h3 class="text-lg font-semibold">RG GPUs</h3>
       <p class="text-sm text-muted-foreground">
-        {#if overview}Updated {formatClock(overview.generated_at)}. Refresh to see changes.{:else}Rogues Gallery GPUs on demand.{/if}
+        {#if overview}Updated {formatClock(overview.generated_at)}.{:else}Rogues Gallery GPUs on demand.{/if}
       </p>
     </div>
     <Button variant="outline" size="sm" onclick={() => void load()} disabled={loading} aria-label="Refresh">
@@ -212,7 +259,7 @@
 
     <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {#each overview.nodes as node (node.name)}
-        <RgNodeCard {node} reference={overview.reference} holds={holdsOn(node.name)} generatedAt={overview.generated_at} />
+        <RgNodeCard {node} reference={overview.reference} holds={holdsOn(node.name)} generatedAt={overview.generated_at} {elapsedS} />
       {/each}
     </div>
 
@@ -233,9 +280,9 @@
               <div class="flex flex-wrap items-center gap-2">
                 <span class="font-semibold">{hold.node}</span>
                 <span class="font-mono text-xs text-muted-foreground">job {hold.job}</span>
-                {#if hold.idle}<Badge variant="destructive">Idle</Badge>{/if}
+                {#if idleBadgeShown(hold)}<Badge variant="destructive">Idle</Badge>{/if}
               </div>
-              <div class="text-muted-foreground">{holdStatus(hold)}</div>
+              <div class="text-muted-foreground">{holdStatus(hold, elapsedS)}</div>
               <div class="text-muted-foreground">{servingLine(hold)}</div>
               {#if hold.serving?.error}<div class="text-destructive text-xs">{hold.serving.error}</div>{/if}
             </div>
@@ -315,8 +362,8 @@
       <Dialog.Header>
         <Dialog.Title>Release hold {releaseTarget.job}?</Dialog.Title>
         <Dialog.Description>
-          This cancels the Slurm job on {releaseTarget.node}{releaseTarget.time_left_s !== null
-            ? ` (${formatTimeLeft(releaseTarget.time_left_s)} left)`
+          This cancels the Slurm job on {releaseTarget.node}{timeLeftText(releaseTarget.time_left_s, elapsedS)
+            ? ` (${timeLeftText(releaseTarget.time_left_s, elapsedS)})`
             : ""}{releaseTarget.serving ? " and stops the model serving on it" : ""}.
         </Dialog.Description>
       </Dialog.Header>
