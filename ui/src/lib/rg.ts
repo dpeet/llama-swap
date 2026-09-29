@@ -1,6 +1,6 @@
 // Pure helpers for the RG GPUs page (routes/RgGpus.svelte).
 
-import type { RgFamilyChoice, RgHold, RgNode } from "./types";
+import type { RgAvailability, RgFamilyChoice, RgHold, RgNode } from "./types";
 
 /** The shortest hold rg-hold accepts; boot alone takes ~6 min. */
 export const MIN_HOLD_MINUTES = 30;
@@ -165,14 +165,58 @@ export function timeLeftText(timeLeftAtFetchS: number | null, elapsedS: number):
 }
 
 /**
- * One line for a hold: "Pending, start by 14:30" or "Running · 1h 30m left".
- * Shared by the holds list and the node cards so the wording cannot diverge.
- * `elapsedS` counts the time left down since the overview was fetched.
+ * "≤ ~3 h" for how long until Slurm's start-by estimate, rounded like
+ * `busyForLabel` ("≤ 30 min" under half an hour, or once the estimate has
+ * passed). An upper bound, because start-by is Slurm's backfill worst case and
+ * the hold usually starts sooner. Null when either time is missing or unparsable.
  */
-export function holdStatus(hold: Pick<RgHold, "state" | "start" | "time_left_s">, elapsedS = 0): string {
-  if (hold.state === "PENDING") return `Pending, start by ${formatClock(hold.start)}`;
+export function startByBound(startIso: string | null | undefined, nowIso: string | null | undefined): string | null {
+  const label = busyForLabel(startIso, nowIso);
+  if (!label) return null;
+  return label.startsWith("~") ? `≤ ${label}` : `≤ ${label.replace(/^< /, "")}`;
+}
+
+/**
+ * The card's line for a pending hold, after "Your hold <job>: ":
+ * "queued · start by 14:30 (≤ ~3 h)". `nowIso` is the snapshot time advanced to now.
+ */
+export function queuedHoldLine(hold: Pick<RgHold, "start">, nowIso: string | null | undefined): string {
+  if (!hold.start) return "queued · no start estimate";
+  const bound = startByBound(hold.start, nowIso);
+  return `queued · start by ${formatClock(hold.start)}${bound ? ` (${bound})` : ""}`;
+}
+
+/**
+ * One line for a hold: "Pending, start by 14:30 (≤ ~3 h)" or "Running · 1h 30m left".
+ * Shared by the holds list and the node cards so the wording cannot diverge.
+ * `elapsedS` counts the time left down since the overview was fetched; `nowIso`
+ * (the snapshot time advanced to now) adds the start-by upper bound to a pending hold.
+ */
+export function holdStatus(
+  hold: Pick<RgHold, "state" | "start" | "time_left_s">,
+  elapsedS = 0,
+  nowIso?: string | null,
+): string {
+  if (hold.state === "PENDING") {
+    const bound = startByBound(hold.start, nowIso);
+    return `Pending, start by ${formatClock(hold.start)}${bound ? ` (${bound})` : ""}`;
+  }
   const left = timeLeftText(hold.time_left_s, elapsedS);
   return `${hold.state[0]}${hold.state.slice(1).toLowerCase()}${left ? ` · ${left}` : ""}`;
+}
+
+export type NodeDisplayState = RgAvailability | "queued" | "yours";
+
+/**
+ * What a node card shows. rg-api reports "ours" when any of our jobs is on the
+ * node, running or pending, but a pending hold does not own the node: someone
+ * else is still running there, so that reads "queued". "ours" with no listed
+ * hold stays "yours", because the hold list may have failed to load.
+ */
+export function nodeDisplayState(availability: RgAvailability, holds: Pick<RgHold, "state">[]): NodeDisplayState {
+  if (availability !== "ours") return availability;
+  const anyRunning = holds.some((hold) => hold.state === "RUNNING");
+  return !anyRunning && holds.some((hold) => hold.state === "PENDING") ? "queued" : "yours";
 }
 
 /** Serving states of a launch still in progress, which naturally has no step yet. */

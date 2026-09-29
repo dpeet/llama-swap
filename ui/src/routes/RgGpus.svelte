@@ -3,7 +3,7 @@
   import { RefreshCw } from "@lucide/svelte";
   import { getRgOverview, grabRg, releaseRg, RgApiError } from "../stores/api";
   import type { RgFamilyChoice, RgGrabResponse, RgHold, RgNode, RgOverview } from "../lib/types";
-  import { canonicalDuration, familyLabel, familyOptions, forceReleaseOffered, formatClock, holdStatus, holdsUnavailable, idleBadgeShown, parseDuration, refreshDue, rgActionErrorText, elapsedSeconds, timeLeftText, REFRESH_INTERVAL_MS } from "../lib/rg";
+  import { canonicalDuration, familyLabel, familyOptions, forceReleaseOffered, formatClock, holdStatus, holdsUnavailable, idleBadgeShown, parseDuration, refreshDue, rgActionErrorText, advanceIso, elapsedSeconds, timeLeftText, REFRESH_INTERVAL_MS } from "../lib/rg";
   import RgNodeCard from "../components/RgNodeCard.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
@@ -26,6 +26,8 @@
   let fetchedAt = $state<number | null>(null);
   let now = $state(Date.now());
   let elapsedS = $derived(fetchedAt === null ? 0 : elapsedSeconds(fetchedAt, now));
+  // The snapshot time advanced to now, the reference for start-by bounds.
+  let busyNow = $derived(advanceIso(overview?.generated_at, elapsedS));
 
   // Plain flags, not $state: they gate fetches and drive no rendering.
   let inFlight = false;
@@ -282,7 +284,7 @@
                 <span class="font-mono text-xs text-muted-foreground">job {hold.job}</span>
                 {#if idleBadgeShown(hold)}<Badge variant="destructive">Idle</Badge>{/if}
               </div>
-              <div class="text-muted-foreground">{holdStatus(hold, elapsedS)}</div>
+              <div class="text-muted-foreground">{holdStatus(hold, elapsedS, busyNow)}</div>
               <div class="text-muted-foreground">{servingLine(hold)}</div>
               {#if hold.serving?.error}<div class="text-destructive text-xs">{hold.serving.error}</div>{/if}
             </div>
