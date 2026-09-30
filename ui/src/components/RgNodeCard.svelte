@@ -4,7 +4,7 @@
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
-  import { advanceIso, busyBadgeLabel, busyTarget, busyTone, formatClock, holdStatus, nodeDisplayState, nodePopoverDetails, queuedHoldLine, speedCars, type BusyTone, type NodeDisplayState } from "../lib/rg";
+  import { advanceIso, busyBadgeLabel, busyTarget, busyTone, familyLabel, formatClock, holdStatus, nodeDisplayState, nodePopoverDetails, queuedHoldLine, speedCars, type BusyTone, type NodeDisplayState } from "../lib/rg";
   import type { RgFamily, RgHold, RgNode } from "../lib/types";
 
   interface Props {
@@ -29,7 +29,9 @@
   let headline = $derived.by(() => {
     const profile = node.profiles.find((p) => p.default) ?? node.profiles[0];
     if (!profile) return null;
-    return speedCars(profile.tok_s, reference[profile.family]);
+    // The family goes on the label because each family has its own DGX
+    // reference, so a 27B ratio and a Flash-Next ratio are not comparable.
+    return { ...speedCars(profile.tok_s, reference[profile.family]), family: familyLabel(profile.family) };
   });
 
   // The variation selector keeps the car an emoji rather than a text glyph.
@@ -197,10 +199,10 @@
         <span class="flex flex-wrap items-baseline gap-x-2" title="Default profile, relative to the DGX">
           <!-- text-xl plus tracking-wider, because the old tracking-tight overlapped the red
                cars into an unreadable smudge on desktop dark mode; wraps below the text on a narrow card. -->
-          <span role="img" aria-label={ratioText(headline.ratio)} class="text-xl leading-none tracking-wider whitespace-nowrap">
+          <span role="img" aria-label="{ratioText(headline.ratio)} on {headline.family}" class="text-xl leading-none tracking-wider whitespace-nowrap">
             {car.repeat(headline.count)}
           </span>
-          <span class="text-muted-foreground text-xs">{ratioText(headline.ratio)}</span>
+          <span class="text-muted-foreground text-xs">{ratioText(headline.ratio)} · {headline.family}</span>
         </span>
       {/if}
     </div>
