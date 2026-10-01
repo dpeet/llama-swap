@@ -1,0 +1,1004 @@
+{
+  "$schema": "./schema.json",
+  "version": 1,
+  "hosts": {
+    "dgx-gb10": {
+      "label": "DGX GB10",
+      "site": "dgx",
+      "gpu": "NVIDIA GB10",
+      "memory_gb": 128,
+      "arch": "aarch64",
+      "notes_md": "DGX Spark, 128 GB unified LPDDR5X at ~273 GB/s."
+    },
+    "violet1": {
+      "label": "RG H100 PCIe (violet1)",
+      "site": "rg",
+      "gpu": "H100 PCIe",
+      "memory_gb": 80,
+      "arch": "x86_64",
+      "notes_md": "RG partition `rg-violet`, driver 615.71.09."
+    }
+  },
+  "builds": {
+    "vllm-0.30-arma": {
+      "engine": "vLLM release plus fork overlay (Python files only)",
+      "version": "0.30.0 · fork `github.com/dpeet/vllm` branch `gb10-flash-next-arm-a` commit `5f5995f05`",
+      "image": "production `vllm-flash-next:v0.30.0-gb10-arma-e29f0cb9a2` = `sha256:c39986e2b59e8f91fce6a7abec2b89eca15dfdefa94a8409de8eb457269efa3d`; benchmark build `…arma-cda9c8974f` = `sha256:ef80aa3bce3aef274400f67e5bed5178c183002fbf4471212d7eacd9ba8e1341`; `FROM vllm/vllm-openai:v0.30.0@sha256:8a69ffad015f138d7170c4ddc429e230a3bc1c1719f67e14324749df200a4b90`, built by `engines/vllm-flash-next/Dockerfile.v030`",
+      "torch": "not read",
+      "flashinfer": "not read",
+      "recorded": "2026-09-30",
+      "notes_md": "v0.30.0 `ced6857af` + disk-backed PLE staged gather `948b82ac7` + reduced-vocab MTP head `0ff4afbb2` + vllm#55557 `8a62887e1` + vllm#57105 `bea6ceebf` + vllm#58961 `e3a5e4843` + post-load PLE scale verify `8ea4e8fea` + review hardening (`91f951e2b`, `934275266`, `5f5995f05`); base branch `gb10-flash-next` `1141f6640`. Image-tag-to-commit mapping: `engines/vllm-flash-next/README.md`."
+    },
+    "vllm-8a72": {
+      "engine": "vLLM, exact-commit wheel plus baked overlays",
+      "version": "0.28.1rc1.dev388+g8a728663c · overlays at `engines/vllm-flash-next` commit `39d9b14`",
+      "image": "local `vllm-flash-next:8a728663-baked-v1` = `sha256:f1b5bc2c98e91dada9c7046beb6d476930c19e65e9035e2a57b3cf274c891214` (wheel installed on `vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-591bb95`)",
+      "torch": "2.13.0+cu130",
+      "flashinfer": "0.6.18.post1",
+      "recorded": "2026-09-28 (read inside the image, `evidence/vllm-versions.txt`); the lane was measured 2026-09-27 on the same image"
+    },
+    "sg-0928": {
+      "engine": "sglang nightly (stock)",
+      "version": "0.0.0.dev1+g81f27fb3a · `81f27fb3a`",
+      "image": "`lmsysorg/sglang:nightly-dev-cu13-20260928-81f27fb3`, digest `sha256:d9e4917808cfaa4b3be033a0c85a3a73d71eb93c17accbfa2ac3e96f551f3a33`, local ID `sha256:3ef6ccb1e9406dca6058656b8b1b03dd29625b2d7317ce9586ad443f63547004`",
+      "torch": "2.13.0+cu130",
+      "flashinfer": "0.6.18",
+      "recorded": "2026-09-28"
+    },
+    "sg-0.5.20": {
+      "engine": "sglang release, thin local builds that add `distro`",
+      "version": "0.5.20 · tag `v0.5.20`",
+      "image": "base `lmsysorg/sglang:v0.5.20-cu130-runtime@sha256:00b02004501e402332827ffd5343a225a8960d99adc990b37d6f31085b8f6800`; local `sglang-qwen:0.5.20` = `sha256:2e133dfa588c82344d208781683a9df20adbb290834902c96499d31e7af41bfc`; local `sglang-gemma:0.5.20` = `sha256:7c43d55b2e5ed49fc0c81239eac4e977fa99d9e3e6f224ae4348714edaf46710` (also bakes in the PR #25075 tool_index patch)",
+      "torch": "2.13.0+cu130",
+      "flashinfer": "0.6.18",
+      "recorded": "2026-09-28"
+    },
+    "vllm-69d3-x86": {
+      "engine": "vLLM nightly (stock PR-branch build, RG violet)",
+      "version": "0.1.dev22018+g69d383751 · `69d383751`",
+      "image": "`vllm/vllm-openai:nightly-dev-amd64-cu130-69d383751` (in-image tag `inferactinc/dev:vllm-dsv41-decoder-replay-pr58132-69d383751226-cu130-amd64`), Apptainer SIF `vllm-69d383751.sif` sha256 `9b51f8a7ec986575…`",
+      "torch": "not read",
+      "flashinfer": "not read",
+      "recorded": "2026-09-28 (read inside the SIF on violet1/violet2)"
+    }
+  },
+  "components": {},
+  "checkpoints": {
+    "nvidia-qwen38-flash-next-nvfp4": {
+      "name": "Qwen3.8-Flash-Next NVFP4 (NVIDIA)",
+      "source": "bind mount `/opt/ai/artisanal-inference/models/Qwen3.8-Flash-Next-NVFP4-nvidia` → `/models/qwen38fn`, files dated 2026-09-17/18, no HF commit in the checkpoint",
+      "precision": "NVFP4"
+    },
+    "flashnext-awq-w4a16": {
+      "name": "Qwen3.8-Flash-Next AWQ-W4A16",
+      "source": "`/net/netscratch/dpeet7/flashnext-awq`",
+      "precision": "AWQ-W4A16 experts, BF16 elsewhere"
+    },
+    "radixark-qwen38-27b-nvfp4": {
+      "name": "RadixArk/Qwen3.8-27B-NVFP4",
+      "source": "HF `RadixArk/Qwen3.8-27B-NVFP4`",
+      "revision": "319f741cce68d7914884900c138a1fbb70a42f30",
+      "precision": "NVFP4"
+    },
+    "incoai-qwen38-27b-dflash2": {
+      "name": "incoai/Qwen3.8-27B-DFlash2 (draft)",
+      "source": "HF `incoai/Qwen3.8-27B-DFlash2`",
+      "revision": "015e795645c74b1a0eeef3b570031fb62e769bc5",
+      "precision": "BF16"
+    },
+    "qwen36-35b-a3b-fp8": {
+      "name": "Qwen/Qwen3.6-35B-A3B-FP8",
+      "source": "HF `Qwen/Qwen3.6-35B-A3B-FP8`",
+      "revision": "95a723d08a9490559dae23d0cff1d9466213d989",
+      "precision": "FP8"
+    },
+    "qwen38-27b-q8-gguf": {
+      "name": "Qwen3.8-27B Q8_0 GGUF",
+      "precision": "Q8_0",
+      "notes_md": "Deleted with the profile on 2026-09-27."
+    },
+    "qwen38-27b-bf16": {
+      "name": "Qwen3.8-27B BF16",
+      "precision": "BF16",
+      "notes_md": "Deleted with the profile on 2026-09-27."
+    },
+    "gpt-oss-120b-mxfp4": {
+      "name": "GPT-OSS-120B",
+      "precision": "MXFP4",
+      "notes_md": "Deleted with the profile on 2026-09-27."
+    }
+  },
+  "configs": {
+    "dgx-vllm-fn@v030-arma": {
+      "label": "vLLM v0.30 fork Flash-Next, fp8 KV",
+      "model": "Qwen3.8-Flash-Next",
+      "family": "flash-next",
+      "host": "dgx-gb10",
+      "build": "vllm-0.30-arma",
+      "image": "vllm-flash-next:v0.30.0-gb10-arma-cda9c8974f",
+      "image_digest": "sha256:ef80aa3bce3aef274400f67e5bed5178c183002fbf4471212d7eacd9ba8e1341",
+      "engine": "vllm",
+      "engine_label": "vLLM NVFP4 MoE + ViT",
+      "checkpoint": "nvidia-qwen38-flash-next-nvfp4",
+      "spec": {
+        "method": "mtp",
+        "depth": 3,
+        "draft_vocab": 65536,
+        "label": "MTP 3"
+      },
+      "kv_dtype": "fp8_e4m3",
+      "context": 262144,
+      "thinking_default": "off",
+      "flags": [
+        "--quantization=modelopt",
+        "--tensor-parallel-size=1",
+        "--trust-remote-code",
+        "--max-model-len=262144",
+        "--max-num-seqs=6",
+        "--gpu-memory-utilization=0.76",
+        "--max-num-batched-tokens=4096",
+        "--no-enable-flashinfer-autotune",
+        "--no-enable-prefix-caching",
+        "--reasoning-parser=qwen3",
+        "--enable-auto-tool-choice",
+        "--tool-call-parser=qwen3_xml",
+        "--default-chat-template-kwargs={\"enable_thinking\": false}",
+        "--speculative-config={\"method\":\"mtp\",\"num_speculative_tokens\":3}",
+        "--compilation-config={\"mode\":0,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[4,8,12,16,20,24]}",
+        "--kv-cache-dtype=fp8_e4m3"
+      ],
+      "env": {
+        "VLLM_USE_DEEP_GEMM": "0",
+        "VLLM_USE_V2_MODEL_RUNNER": "1",
+        "QWEN4EXP_PLE_MMAP": "1",
+        "QWEN4EXP_PLE_STAGED": "1",
+        "QWEN4EXP_PLE_MMAP_THREADS": "64",
+        "QWEN4EXP_DRAFT_VOCAB": "65536",
+        "VLLM_PLE_CPU_OFFLOAD": "0"
+      },
+      "compose": "serve/compose.flash-next-vllm.yaml",
+      "notes_md": "The V2b arm A benchmark build of 2026-09-30. Compiled-kernel cache `/opt/ai/cache/vllm-flash-next-v030:/root/.cache`; `cpuset: 0-19`, `mem_limit: 112g`."
+    },
+    "dgx-vllm-fn@v030-arma-e29f": {
+      "label": "vLLM v0.30 fork Flash-Next, fp8 KV",
+      "model": "Qwen3.8-Flash-Next",
+      "family": "flash-next",
+      "host": "dgx-gb10",
+      "build": "vllm-0.30-arma",
+      "image": "vllm-flash-next:v0.30.0-gb10-arma-e29f0cb9a2",
+      "image_digest": "sha256:c39986e2b59e8f91fce6a7abec2b89eca15dfdefa94a8409de8eb457269efa3d",
+      "engine": "vllm",
+      "engine_label": "vLLM NVFP4 MoE + ViT",
+      "checkpoint": "nvidia-qwen38-flash-next-nvfp4",
+      "spec": {
+        "method": "mtp",
+        "depth": 3,
+        "draft_vocab": 65536,
+        "label": "MTP 3"
+      },
+      "kv_dtype": "fp8_e4m3",
+      "context": 262144,
+      "thinking_default": "off",
+      "flags": [
+        "--quantization=modelopt",
+        "--tensor-parallel-size=1",
+        "--trust-remote-code",
+        "--max-model-len=262144",
+        "--max-num-seqs=6",
+        "--gpu-memory-utilization=0.76",
+        "--max-num-batched-tokens=4096",
+        "--no-enable-flashinfer-autotune",
+        "--no-enable-prefix-caching",
+        "--reasoning-parser=qwen3",
+        "--enable-auto-tool-choice",
+        "--tool-call-parser=qwen3_xml",
+        "--default-chat-template-kwargs={\"enable_thinking\": false}",
+        "--speculative-config={\"method\":\"mtp\",\"num_speculative_tokens\":3}",
+        "--compilation-config={\"mode\":0,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[4,8,12,16,20,24]}",
+        "--kv-cache-dtype=fp8_e4m3"
+      ],
+      "env": {
+        "VLLM_USE_DEEP_GEMM": "0",
+        "VLLM_USE_V2_MODEL_RUNNER": "1",
+        "QWEN4EXP_PLE_MMAP": "1",
+        "QWEN4EXP_PLE_STAGED": "1",
+        "QWEN4EXP_PLE_MMAP_THREADS": "64",
+        "QWEN4EXP_DRAFT_VOCAB": "65536",
+        "VLLM_PLE_CPU_OFFLOAD": "0"
+      },
+      "compose": "serve/compose.flash-next-vllm.yaml",
+      "notes_md": "The production image since 2026-10-01: the benchmark build plus the PLE post-load-verify fix. Not re-measured; its lane reports `dgx-vllm-fn@v030-arma`. Compiled-kernel cache `/opt/ai/cache/vllm-flash-next-v030:/root/.cache`, separate from the rollback's, because a shared cache holds kernels compiled for the other build."
+    },
+    "dgx-vllm-fn@8a72": {
+      "label": "vLLM Flash-Next, fp8 KV",
+      "model": "Qwen3.8-Flash-Next",
+      "family": "flash-next",
+      "host": "dgx-gb10",
+      "build": "vllm-8a72",
+      "image": "vllm-flash-next:8a728663-baked-v1",
+      "image_digest": "sha256:f1b5bc2c98e91dada9c7046beb6d476930c19e65e9035e2a57b3cf274c891214",
+      "engine": "vllm",
+      "engine_label": "vLLM NVFP4 MoE + ViT",
+      "checkpoint": "nvidia-qwen38-flash-next-nvfp4",
+      "spec": {
+        "method": "mtp",
+        "depth": 3,
+        "draft_vocab": 65536,
+        "label": "MTP 3"
+      },
+      "kv_dtype": "fp8_e4m3",
+      "context": 262144,
+      "thinking_default": "off",
+      "flags": [
+        "--quantization=modelopt",
+        "--tensor-parallel-size=1",
+        "--trust-remote-code",
+        "--max-model-len=262144",
+        "--max-num-seqs=6",
+        "--gpu-memory-utilization=0.76",
+        "--max-num-batched-tokens=4096",
+        "--no-enable-flashinfer-autotune",
+        "--no-enable-prefix-caching",
+        "--reasoning-parser=qwen3",
+        "--enable-auto-tool-choice",
+        "--tool-call-parser=qwen3_xml",
+        "--default-chat-template-kwargs={\"enable_thinking\": false}",
+        "--speculative-config={\"method\":\"mtp\",\"num_speculative_tokens\":3}",
+        "--compilation-config={\"mode\":0,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[4,8,12,16,20,24]}",
+        "--kv-cache-dtype=fp8_e4m3"
+      ],
+      "env": {
+        "VLLM_USE_V2_MODEL_RUNNER": "1",
+        "QWEN4EXP_PLE_MMAP": "1",
+        "QWEN4EXP_PLE_STAGED": "1",
+        "QWEN4EXP_DRAFT_VOCAB": "65536"
+      },
+      "compose": "serve/compose.flash-next-vllm.yaml",
+      "notes_md": "tonyd2wild's single-Spark TP1 recipe with 9 overlay files baked in (PLE staged-gather, reduced-vocab MTP head, our FP8_PB_WO MoE fix). Not pullable; the compose header has the rebuild command. Compiled-kernel cache `/opt/ai/cache/vllm-flash-next`; `cpuset: 0-19`, `mem_limit: 112g`."
+    },
+    "dgx-sglang-27b@0928": {
+      "label": "sglang 27B",
+      "model": "Qwen3.8-27B",
+      "family": "27b",
+      "host": "dgx-gb10",
+      "build": "sg-0928",
+      "image": "lmsysorg/sglang:nightly-dev-cu13-20260928-81f27fb3",
+      "image_digest": "sha256:d9e4917808cfaa4b3be033a0c85a3a73d71eb93c17accbfa2ac3e96f551f3a33",
+      "engine": "sglang",
+      "engine_label": "sglang NVFP4 dense",
+      "checkpoint": "radixark-qwen38-27b-nvfp4",
+      "spec": {
+        "method": "dflash",
+        "depth": 8,
+        "draft_checkpoint": "incoai-qwen38-27b-dflash2",
+        "label": "DFlash2"
+      },
+      "kv_dtype": "auto (target float8_e4m3fn from the checkpoint's kv_cache_scheme, drafter bf16)",
+      "context": 262144,
+      "thinking_default": "on",
+      "flags": [
+        "--language-only",
+        "--attention-backend=flashinfer",
+        "--trust-remote-code",
+        "--context-length=262144",
+        "--reasoning-parser=qwen3",
+        "--tool-call-parser=qwen3_coder",
+        "--mem-fraction-static=0.70",
+        "--max-running-requests=2",
+        "--max-mamba-cache-size=10",
+        "--chunked-prefill-size=2048",
+        "--disable-flashinfer-autotune",
+        "--num-continuous-decode-steps=2",
+        "--sleep-on-idle",
+        "--speculative-algorithm=DFLASH",
+        "--speculative-num-draft-tokens=8",
+        "--speculative-draft-model-path=incoai/Qwen3.8-27B-DFlash2"
+      ],
+      "compose": "serve/compose.qwen38.yaml",
+      "notes_md": "Clients send `reasoning_effort=low`; omitting it resolves to the template's `xhigh`."
+    },
+    "dgx-sglang-27b-vl@0928": {
+      "label": "sglang 27B vision",
+      "model": "Qwen3.8-27B vision",
+      "family": "27b",
+      "host": "dgx-gb10",
+      "build": "sg-0928",
+      "image": "lmsysorg/sglang:nightly-dev-cu13-20260928-81f27fb3",
+      "image_digest": "sha256:d9e4917808cfaa4b3be033a0c85a3a73d71eb93c17accbfa2ac3e96f551f3a33",
+      "engine": "sglang",
+      "engine_label": "sglang NVFP4 dense + ViT",
+      "checkpoint": "radixark-qwen38-27b-nvfp4",
+      "spec": {
+        "method": "none",
+        "label": "none"
+      },
+      "kv_dtype": "auto (target float8_e4m3fn)",
+      "context": 262144,
+      "thinking_default": "on",
+      "flags": [
+        "--attention-backend=flashinfer",
+        "--trust-remote-code",
+        "--context-length=262144",
+        "--reasoning-parser=qwen3",
+        "--tool-call-parser=qwen3_coder",
+        "--mem-fraction-static=0.70",
+        "--max-running-requests=2",
+        "--max-mamba-cache-size=10",
+        "--chunked-prefill-size=2048",
+        "--disable-flashinfer-autotune",
+        "--num-continuous-decode-steps=2",
+        "--sleep-on-idle"
+      ],
+      "compose": "serve/compose.qwen38-vl.yaml",
+      "caveats": [
+        "vl-27b-no-spec"
+      ]
+    },
+    "dgx-sglang-qwen36-35b@0.5.20": {
+      "label": "sglang Qwen3.6-35B-A3B, uncapped pool",
+      "model": "Qwen3.6-35B-A3B",
+      "family": "other",
+      "host": "dgx-gb10",
+      "build": "sg-0.5.20",
+      "image": "sglang-qwen:0.5.20",
+      "image_digest": "sha256:2e133dfa588c82344d208781683a9df20adbb290834902c96499d31e7af41bfc",
+      "engine": "sglang",
+      "engine_label": "sglang FP8, MoE A3B",
+      "checkpoint": "qwen36-35b-a3b-fp8",
+      "spec": {
+        "method": "eagle",
+        "depth": 2,
+        "label": "EAGLE MTP s2/d3"
+      },
+      "kv_dtype": "bf16 (auto; the checkpoint has no kv_cache_scheme)",
+      "thinking_default": "on",
+      "compose": "serve/compose.qwen.yaml",
+      "notes_md": "Before the 2026-09-28 pool cap: the pool sized from MemAvailable at launch and reached 1,851,144 tokens, ~80.8 GiB, over the 67 GiB admission ceiling."
+    },
+    "dgx-sglang-qwen36-35b@0.5.20-cap": {
+      "label": "sglang Qwen3.6-35B-A3B",
+      "model": "Qwen3.6-35B-A3B",
+      "family": "other",
+      "host": "dgx-gb10",
+      "build": "sg-0.5.20",
+      "image": "sglang-qwen:0.5.20",
+      "image_digest": "sha256:2e133dfa588c82344d208781683a9df20adbb290834902c96499d31e7af41bfc",
+      "engine": "sglang",
+      "engine_label": "sglang FP8, MoE A3B",
+      "checkpoint": "qwen36-35b-a3b-fp8",
+      "spec": {
+        "method": "eagle",
+        "depth": 2,
+        "label": "EAGLE MTP s2/d3"
+      },
+      "kv_dtype": "bf16 (auto; the checkpoint has no kv_cache_scheme)",
+      "thinking_default": "on",
+      "flags": [
+        "--max-total-tokens=524288"
+      ],
+      "compose": "serve/compose.qwen.yaml",
+      "notes_md": "The uncapped config plus `--max-total-tokens=524288` (two full 131K requests at max-running 2): footprint 52.9 GiB."
+    },
+    "dgx-llamacpp-27b-gguf@2026-08-15": {
+      "label": "llama.cpp 27B Q8_0 GGUF",
+      "model": "Qwen3.8-27B GGUF",
+      "family": "27b",
+      "host": "dgx-gb10",
+      "build": null,
+      "image": "llama-muse:local",
+      "engine": "llama.cpp",
+      "engine_label": "llama.cpp Q8_0 GGUF",
+      "checkpoint": "qwen38-27b-q8-gguf",
+      "spec": {
+        "method": "mtp",
+        "depth": 3,
+        "label": "native MTP n-max=3, p-min=0"
+      },
+      "context": 131072,
+      "thinking_default": "via-template",
+      "flags": [
+        "-c 131072",
+        "--spec-draft-n-max 3",
+        "--spec-draft-p-min 0"
+      ],
+      "compose": "serve/compose.qwen38-gguf.yaml",
+      "notes_md": "Retuned 2026-08-15 (p-min 0.75 → 0). Retired 2026-09-27; `git show 716d241^:serve/compose.qwen38-gguf.yaml` recovers the compose."
+    },
+    "dgx-sglang-27b-bf16@unrecorded": {
+      "label": "sglang 27B BF16",
+      "model": "Qwen3.8-27B BF16",
+      "family": "27b",
+      "host": "dgx-gb10",
+      "build": null,
+      "engine": "sglang",
+      "engine_label": "sglang BF16 dense",
+      "checkpoint": "qwen38-27b-bf16",
+      "spec": {
+        "method": "none",
+        "label": "none"
+      },
+      "thinking_default": "on",
+      "compose": "serve/compose.qwen38-bf16.yaml",
+      "notes_md": "The scoring profile; streams ~52 GB of weights per token. Retired 2026-09-27."
+    },
+    "dgx-sglang-gpt-oss-120b@unrecorded": {
+      "label": "sglang GPT-OSS-120B",
+      "model": "GPT-OSS-120B",
+      "family": "other",
+      "host": "dgx-gb10",
+      "build": null,
+      "engine": "sglang",
+      "engine_label": "sglang MXFP4 MoE",
+      "checkpoint": "gpt-oss-120b-mxfp4",
+      "spec": {
+        "method": "none",
+        "label": "—"
+      },
+      "thinking_default": "on",
+      "notes_md": "Never measured on this box; see `docs/complete/test-gpt-oss-120b-2026-09.md`. Retired 2026-09-27."
+    },
+    "V1-09b": {
+      "label": "vLLM nightly Flash-Next AWQ-W4A16, PLE on host, no MTP, fp8 KV, 150k",
+      "model": "Qwen3.8-Flash-Next",
+      "family": "flash-next",
+      "host": "violet1",
+      "build": "vllm-69d3-x86",
+      "image": "vllm-69d383751.sif",
+      "engine": "vllm",
+      "engine_label": "vLLM AWQ-W4A16 MoE + ViT",
+      "checkpoint": "flashnext-awq-w4a16",
+      "spec": {
+        "method": "none",
+        "label": "none (MTP doesn't fit 80 GB)"
+      },
+      "kv_dtype": "fp8_e4m3",
+      "context": 150000,
+      "thinking_default": "off",
+      "flags": [
+        "--served-model-name qwen3.8-flash-next",
+        "--tensor-parallel-size 1",
+        "--max-num-seqs 4",
+        "--no-enable-prefix-caching",
+        "--no-enable-flashinfer-autotune",
+        "--reasoning-parser qwen3",
+        "--enable-auto-tool-choice",
+        "--tool-call-parser qwen3_xml",
+        "--default-chat-template-kwargs {\"enable_thinking\":false}",
+        "--engram-config {\"cpu_offload\":true}",
+        "--disable-custom-all-reduce",
+        "--kv-cache-dtype fp8_e4m3",
+        "--gpu-memory-utilization 0.975",
+        "--compilation-config {\"mode\":0,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[1,2,3,4]}",
+        "--max-model-len 150000",
+        "--limit-mm-per-prompt {\"image\":128}",
+        "--max-num-batched-tokens 8192"
+      ],
+      "env": {
+        "VLLM_PLE_CPU_OFFLOAD": "1",
+        "VLLM_USE_V2_MODEL_RUNNER": "1"
+      },
+      "compose": "serve/rg/violet/matrix-violet1.tsv",
+      "matrix_id": "V1-09b",
+      "notes_md": "Overlay `ngram_embedding.common.69d383751.py`; the PLE table stays in host RAM. At GMU 0.95 and batched 16384 it fits only 59,584 tokens (V1-09)."
+    }
+  },
+  "lanes": {
+    "dgx-vllm-fn": {
+      "label": "DGX · vLLM Flash-Next, v0.30 fork (production since 2026-10-01)",
+      "host": "dgx-gb10",
+      "family": "flash-next",
+      "llama_swap_id": "qwen38-flash-next-vllm",
+      "port": 30015,
+      "status": "production",
+      "since": "2026-10-01",
+      "current_config": "dgx-vllm-fn@v030-arma-e29f",
+      "measured_config": "dgx-vllm-fn@v030-arma",
+      "featured": true,
+      "notes_md": "- **Why:** it prefills about 23% faster than `vllm-8a72` (P6 4k median 2,163 vs 1,756 tok/s on the same-day control) and cuts long-image TTFT about 15%, with no detectable change in single-stream decode, accept length or graded answers.\n- **What the fork carries on v0.30.0:** the disk-backed PLE staged gather (dtype-aware: FP8 + global scale for the NVIDIA checkpoint, BF16 without a scale for Swift), the reduced-vocab 65,536 MTP draft head, and cherry-picks of vllm#55557 (fp8 KV on QSA), #57105 (QSA indexer logits workspace) and #58961 (frees the profiling KV held by QSA key views). The FP8 scale is verified once after the whole weight stream, logged as `PLE disk: post-load verify OK`.\n- **Measured (2026-09-30/10-01):** weights 76.5 GiB loaded in ~600 s, ready ~11 min after the request; the KV pool varies about 12% between boots of the same image and flags (569,302, 540,175 and 603,725 tokens); MemAvailable at ready 19.2 GiB, lowest 9.8 GiB during a 100-frame request. `max-num-batched-tokens=8192` was tested and rejected.\n- **Verified:** `behavior_check.sh` ok both cases; 100-frame and 120-frame image requests return valid JSON.\n- **Rollback:** set `image:` to `vllm-flash-next:8a728663-baked-v1` and the cache mount to `/opt/ai/cache/vllm-flash-next` in `serve/compose.flash-next-vllm.yaml`. The rollback image and cache are untouched."
+    },
+    "dgx-vllm-fn-rollback": {
+      "label": "DGX · vLLM Flash-Next, previous production (`vllm-8a72`, rollback)",
+      "host": "dgx-gb10",
+      "family": "flash-next",
+      "llama_swap_id": "qwen38-flash-next-vllm",
+      "port": 30015,
+      "status": "rollback",
+      "since": "2026-10-01",
+      "current_config": "dgx-vllm-fn@8a72",
+      "featured": true,
+      "notes_md": "- **Memory:** admission ceiling 100 GiB (`serve/memory-admission.env`); `mem_limit: 112g`.\n- **Why it stays pinned:** upstream vLLM merged only UVA/CPU PLE offload (#54371), which frees nothing on GB10's shared pool; the disk-backed PR #54129 closed unmerged, and its successor #58815 is open."
+    },
+    "dgx-sglang-27b": {
+      "label": "DGX · sglang Qwen3.8-27B (production)",
+      "host": "dgx-gb10",
+      "family": "27b",
+      "llama_swap_id": "qwen3.8-27b",
+      "port": 30013,
+      "status": "production",
+      "current_config": "dgx-sglang-27b@0928",
+      "featured": true,
+      "notes_md": "- **Memory:** admission ceiling 83 GiB. Footprint ~77 GB on `sg-0928`."
+    },
+    "dgx-sglang-27b-vl": {
+      "label": "DGX · sglang Qwen3.8-27B vision",
+      "host": "dgx-gb10",
+      "family": "27b",
+      "llama_swap_id": "qwen3.8-27b-vl",
+      "port": 30014,
+      "status": "registered",
+      "current_config": "dgx-sglang-27b-vl@0928"
+    },
+    "dgx-sglang-qwen36-35b": {
+      "label": "DGX · sglang Qwen3.6-35B-A3B",
+      "host": "dgx-gb10",
+      "family": "other",
+      "llama_swap_id": "qwen3.6-35b-a3b",
+      "status": "registered",
+      "since": "2026-09-28",
+      "current_config": "dgx-sglang-qwen36-35b@0.5.20-cap"
+    },
+    "dgx-llamacpp-27b-gguf": {
+      "label": "DGX · llama.cpp Qwen3.8-27B GGUF",
+      "host": "dgx-gb10",
+      "family": "27b",
+      "llama_swap_id": "qwen3.8-27b-gguf",
+      "status": "retired",
+      "since": "2026-09-27",
+      "current_config": "dgx-llamacpp-27b-gguf@2026-08-15"
+    },
+    "dgx-sglang-27b-bf16": {
+      "label": "DGX · sglang Qwen3.8-27B BF16",
+      "host": "dgx-gb10",
+      "family": "27b",
+      "llama_swap_id": "qwen3.8-27b-bf16",
+      "status": "retired",
+      "since": "2026-09-27",
+      "current_config": "dgx-sglang-27b-bf16@unrecorded"
+    },
+    "dgx-sglang-gpt-oss-120b": {
+      "label": "DGX · sglang GPT-OSS-120B",
+      "host": "dgx-gb10",
+      "family": "other",
+      "llama_swap_id": "gpt-oss-120b",
+      "status": "retired",
+      "since": "2026-09-27",
+      "current_config": "dgx-sglang-gpt-oss-120b@unrecorded"
+    },
+    "rg-flash-next-h100": {
+      "label": "RG H100 PCIe (violet1) · vLLM nightly Flash-Next",
+      "host": "violet1",
+      "family": "flash-next",
+      "rg_profile": "flash-next-h100",
+      "status": "registered",
+      "current_config": "V1-09b",
+      "featured": true,
+      "notes_md": "- The node's default profile, rather than the faster single-stream llama.cpp V1-06, because it holds killfeed's largest request (120 frames at 150k)."
+    }
+  },
+  "caveats": {
+    "vllm-accept-def": {
+      "mark": "ᵃ",
+      "text_md": "vLLM's definition, `1 + accepted/drafts`. sglang's is `completion_tokens / verify steps`. Compare accept_len within an engine or between the two vLLM hosts, not vLLM against sglang."
+    },
+    "e2e-rates": {
+      "mark": "ᵇ",
+      "text_md": "End-to-end rates: client wall time including TTFT on vLLM, the server's `e2e_latency` on sglang. Compare each column across rows and never multiply accept_len × steps/s into a decode rate."
+    },
+    "sglang-accept-flushed": {
+      "mark": "ᶜ",
+      "text_md": "One `bench_spec_accept.py` run per mode from a flushed cache. The thinking-off figure pairs with the row's speed columns; the thinking-on figure is the one that compares with the 2026-09-27 sglang rows, which measured thinking on only."
+    },
+    "27b-max-running-2": {
+      "mark": "ᵈ",
+      "text_md": "`--max-running-requests=2` on the 27B profile, so two of the four streams queue; this is the profile's aggregate, not a 4-way-concurrent one."
+    },
+    "rg-on-node": {
+      "mark": "ʰ",
+      "text_md": "**On-node** `bench_decode_prefill.py` run 1 / run 2 (the same harness as every DGX cell, run on the RG node against `127.0.0.1:8000`), because the tunnel adds ~40 ms to TTFT."
+    },
+    "ple-first-batch-warmup": {
+      "mark": "ⁱ",
+      "text_md": "The Flash-Next PLE lane's first 4-stream run reads low at the same per-stream rate (V1-02 244.0 / 307.3, V1-09b 274.3 / 308.6): a first-batch warmup, so use run 2."
+    },
+    "dgx-0930-one-boot": {
+      "mark": "ᵏ",
+      "text_md": "The 2026-09-30 DGX rows are one boot each. The vLLM rows' 120-frame cell is the flushed-rep range (prefix caching is off)."
+    },
+    "prefill-27b-cold-alt": {
+      "mark": "ᵍ",
+      "text_md": "`bench_decode_prefill.py` run 1 / run 2, the harness behind every other prefill cell. `bench_prefill_cold.py` (3 reps, each with a unique nonce prefix; sglang doesn't report cached tokens) gave 2,336–2,475."
+    },
+    "vl-27b-no-spec": {
+      "mark": "²",
+      "text_md": "**The 27B vision profile runs without speculative decoding.** sglang's image path has no spec decode for the ratio-3 arch, and llama.cpp's MTP draft crashes once an image enters (llama.cpp #25144, unmerged as of 2026-08-15). `serve/compose.qwen38-vl.yaml`'s header has the decision and revisit triggers."
+    }
+  },
+  "campaigns": {
+    "xhost-2026-09-27": {
+      "label": "Cross-host fixed-harness run",
+      "dates": "2026-09-27",
+      "raw_output": "logs/xhost-2026-09-27/"
+    },
+    "rebench-2026-09-28": {
+      "label": "DGX engine refresh",
+      "dates": "2026-09-28",
+      "plan": "docs/todo/dgx-rebench-2026-09.md",
+      "raw_output": "logs/rebench-2026-09-28/"
+    },
+    "rg-violet-2026-09-28": {
+      "label": "RG violet campaign (H100 PCIe, A100 PCIe)",
+      "dates": "2026-09-28",
+      "plan": "docs/todo/rg-violet-campaign.md",
+      "raw_output": "/net/netscratch/dpeet7/rg/violet/results/"
+    },
+    "refresh-2026-09-30": {
+      "label": "Flash-Next v0.30 fork, refresh and Swift bench",
+      "dates": "2026-09-30 to 2026-10-01",
+      "plan": "docs/todo/flash-next-refresh-swift-2026-09-30.md",
+      "raw_output": "logs/rebench-2026-09-30/"
+    },
+    "gguf-grid-2026-08-15": {
+      "label": "Qwen3.8-27B-gguf MTP spec-flag grid",
+      "dates": "2026-08-15"
+    }
+  },
+  "views": {
+    "fastest-way": {
+      "kind": "table",
+      "title": "Fastest way to run Qwen3.8-27B and Flash-Next",
+      "rows": {
+        "lanes": "featured"
+      },
+      "columns": [
+        {
+          "header": "Model",
+          "template": "{config.model}"
+        },
+        {
+          "header": "Host",
+          "template": "{host.label}"
+        },
+        {
+          "header": "Best lane",
+          "template": "{config.label}{row.lane_status}"
+        },
+        {
+          "header": "Build",
+          "template": "`{config.build}`",
+          "missing": "unrecorded"
+        },
+        {
+          "header": "Thinking (measured / served)",
+          "template": "{row.thinking_measured} / {config.thinking_default}"
+        },
+        {
+          "header": "Short",
+          "align": "right",
+          "metric": "decode_short",
+          "where": {
+            "thinking_measured": false
+          },
+          "aggregate": "mean",
+          "precision": 1
+        },
+        {
+          "header": "Balanced",
+          "align": "right",
+          "metric": "decode_balanced",
+          "where": {
+            "thinking_measured": false
+          },
+          "aggregate": "mean",
+          "precision": 1
+        },
+        {
+          "header": "4-stream",
+          "align": "right",
+          "metric": "decode_4stream",
+          "where": {
+            "thinking_measured": false
+          },
+          "aggregate": "mean",
+          "precision": 0
+        },
+        {
+          "header": "Prefill tok/s",
+          "align": "right",
+          "metric": "prefill_cold",
+          "aggregate": "range",
+          "precision": 0
+        },
+        {
+          "header": "Comparable?",
+          "template": "{row.provenance}"
+        }
+      ]
+    },
+    "cross-host": {
+      "kind": "table",
+      "title": "Cross-host scoreboard (2026-09-27, fixed harness)",
+      "rows": {
+        "configs": [
+          "dgx-vllm-fn@8a72",
+          "dgx-vllm-fn@v030-arma",
+          "dgx-sglang-27b@0928",
+          "V1-09b"
+        ]
+      },
+      "columns": [
+        {
+          "header": "Host · lane",
+          "template": "{host.label} · {config.label}{row.lane_status}"
+        },
+        {
+          "header": "Build",
+          "template": "`{config.build}`",
+          "missing": "unrecorded"
+        },
+        {
+          "header": "Thinking",
+          "template": "{row.thinking_measured}"
+        },
+        {
+          "header": "Short tok/s",
+          "align": "right",
+          "metric": "decode_short",
+          "where": {
+            "thinking_measured": false
+          }
+        },
+        {
+          "header": "Balanced tok/s",
+          "align": "right",
+          "metric": "decode_balanced",
+          "where": {
+            "thinking_measured": false
+          }
+        },
+        {
+          "header": "4-stream agg",
+          "align": "right",
+          "metric": "decode_4stream",
+          "where": {
+            "thinking_measured": false
+          }
+        },
+        {
+          "header": "Cold prefill tok/s (~3.8k)",
+          "align": "right",
+          "metric": "prefill_cold",
+          "precision": 0
+        },
+        {
+          "header": "TTFT (~3.8k)",
+          "align": "right",
+          "metric": "ttft_cold",
+          "suffix": " s"
+        },
+        {
+          "header": "accept_len",
+          "align": "right",
+          "metric": "accept_len",
+          "where": {
+            "thinking_measured": false
+          }
+        },
+        {
+          "header": "accept_len, thinking on",
+          "align": "right",
+          "metric": "accept_len",
+          "where": {
+            "thinking_measured": true
+          }
+        },
+        {
+          "header": "steps/s",
+          "align": "right",
+          "metric": "steps_per_s",
+          "where": {
+            "thinking_measured": false
+          }
+        },
+        {
+          "header": "steps/s, thinking on",
+          "align": "right",
+          "metric": "steps_per_s",
+          "where": {
+            "thinking_measured": true
+          }
+        },
+        {
+          "header": "140k-frame decode",
+          "align": "right",
+          "metric": "image_decode",
+          "where": {
+            "conditions": {
+              "frames": 120
+            }
+          }
+        },
+        {
+          "header": "140k-frame TTFT",
+          "align": "right",
+          "metric": "image_ttft",
+          "where": {
+            "conditions": {
+              "frames": 120
+            }
+          },
+          "suffix": " s"
+        },
+        {
+          "header": "140k-frame JSON ok",
+          "align": "right",
+          "metric": "image_json_ok",
+          "where": {
+            "conditions": {
+              "frames": 120
+            }
+          },
+          "suffix": "/120"
+        }
+      ]
+    },
+    "decode-scoreboard": {
+      "kind": "table",
+      "title": "Current Decode Scoreboard",
+      "rows": {
+        "configs": [
+          "dgx-vllm-fn@v030-arma",
+          "dgx-sglang-27b@0928",
+          "dgx-sglang-27b-vl@0928",
+          "dgx-sglang-qwen36-35b@0.5.20-cap",
+          "dgx-sglang-qwen36-35b@0.5.20",
+          "dgx-llamacpp-27b-gguf@2026-08-15",
+          "dgx-sglang-27b-bf16@unrecorded",
+          "dgx-sglang-gpt-oss-120b@unrecorded"
+        ]
+      },
+      "columns": [
+        {
+          "header": "Model (profile)",
+          "template": "{config.model}"
+        },
+        {
+          "header": "Profile",
+          "template": "`{lane.llama_swap_id}`"
+        },
+        {
+          "header": "Engine / precision",
+          "template": "{config.engine_label}"
+        },
+        {
+          "header": "Build",
+          "template": "`{config.build}`",
+          "missing": "unrecorded"
+        },
+        {
+          "header": "Speculative",
+          "template": "{config.spec.label}",
+          "config_caveats": true
+        },
+        {
+          "header": "Decode tok/s",
+          "align": "right",
+          "parts": [
+            {
+              "metric": "decode_short",
+              "where": {
+                "thinking_measured": false
+              },
+              "label": "short"
+            },
+            {
+              "metric": "decode_balanced",
+              "where": {
+                "thinking_measured": false
+              },
+              "label": "balanced"
+            },
+            {
+              "metric": "decode_prose",
+              "label": "prose"
+            },
+            {
+              "metric": "decode_structured",
+              "label": "structured"
+            },
+            {
+              "metric": "decode_single"
+            },
+            {
+              "metric": "image_decode",
+              "where": {
+                "harness": "qc_vision"
+              },
+              "label": "on images"
+            }
+          ],
+          "aggregate": "mean",
+          "precision": 1,
+          "missing": "unmeasured"
+        },
+        {
+          "header": "Decode definition",
+          "template": "{row.method}"
+        },
+        {
+          "header": "Thinking default",
+          "template": "{config.thinking_default}"
+        },
+        {
+          "header": "Residency",
+          "template": "{row.residency}"
+        },
+        {
+          "header": "Status · compose",
+          "template": "{lane.status} · `{config.compose}`"
+        }
+      ]
+    },
+    "lane-cards": {
+      "kind": "lane-cards",
+      "lanes": [
+        "dgx-vllm-fn",
+        "dgx-vllm-fn-rollback",
+        "rg-flash-next-h100"
+      ]
+    }
+  },
+  "refs": {
+    "rg-reference-flash-next": {
+      "target": "serve/rg/catalog.toml",
+      "key": "reference.flash-next",
+      "config": "dgx-vllm-fn@8a72",
+      "metric": "decode_short",
+      "where": {
+        "thinking_measured": false
+      },
+      "aggregate": "mean",
+      "precision": 1,
+      "note": "Still the rollback lane's figure until the owner decides Q3 (repoint at `dgx-vllm-fn@v030-arma`)."
+    },
+    "rg-reference-27b": {
+      "target": "serve/rg/catalog.toml",
+      "key": "reference.27b",
+      "config": "dgx-sglang-27b@0928",
+      "metric": "decode_short",
+      "where": {
+        "thinking_measured": false
+      },
+      "aggregate": "mean",
+      "precision": 1
+    },
+    "rg-dgx-vision-prefill": {
+      "target": "serve/rg/catalog.toml",
+      "key": "reference.vision_prefill_tok_s",
+      "config": "dgx-vllm-fn@8a72",
+      "metric": "image_ttft",
+      "where": {
+        "conditions": {
+          "frames": 120
+        }
+      },
+      "aggregate": "mean",
+      "transform": "prompt_tokens_per_s",
+      "precision": 0,
+      "note": "Drives the router's RG vision admission (`router/app.py`); Q3 decides whether it moves to the v0.30 lane."
+    },
+    "rg-h100-vision-prefill": {
+      "target": "serve/rg/catalog.toml",
+      "key": "profile[id=flash-next-h100].vision_prefill_tok_s",
+      "config": "V1-09b",
+      "metric": "image_ttft",
+      "where": {
+        "conditions": {
+          "frames": 120
+        }
+      },
+      "aggregate": "mean",
+      "transform": "prompt_tokens_per_s",
+      "precision": 0
+    }
+  }
+}

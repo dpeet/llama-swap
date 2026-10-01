@@ -1,6 +1,6 @@
 <script lang="ts">
   import { link } from "svelte-spa-router";
-  import { FerrisWheel, Boxes, Activity, Cat, ScrollText, Gauge, Cpu, Rocket, Sun, Moon, Monitor, ChevronRight, Settings, CircleQuestionMark } from "@lucide/svelte";
+  import { FerrisWheel, Boxes, Activity, Cat, ScrollText, Gauge, Cpu, Rocket, ChartScatter, Sun, Moon, Monitor, ChevronRight, Settings, CircleQuestionMark } from "@lucide/svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -215,6 +215,18 @@
                 <a href="/hardware" use:link {...props}>
                   <Cpu />
                   <span>Hardware</span>
+                </a>
+              {/snippet}
+            </Sidebar.MenuButton>
+          </Sidebar.MenuItem>
+
+          <!-- Always shown, like RG GPUs: hiding it would need a startup fetch of /api/results. -->
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton isActive={isActive("/results", $currentRoute)} tooltipContent="Results">
+              {#snippet child({ props })}
+                <a href="/results" use:link {...props}>
+                  <ChartScatter />
+                  <span>Results</span>
                 </a>
               {/snippet}
             </Sidebar.MenuButton>

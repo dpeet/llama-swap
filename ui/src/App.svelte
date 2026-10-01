@@ -45,6 +45,7 @@
     "/performance": wrap({ asyncComponent: () => import("./routes/Performance.svelte"), loadingComponent: RouteLoading }),
     "/hardware": wrap({ asyncComponent: () => import("./routes/Hardware.svelte"), loadingComponent: RouteLoading }),
     "/rg": wrap({ asyncComponent: () => import("./routes/RgGpus.svelte"), loadingComponent: RouteLoading }),
+    "/results": wrap({ asyncComponent: () => import("./routes/Results.svelte"), loadingComponent: RouteLoading }),
     "/tailcat": wrap({ asyncComponent: () => import("./routes/Tailcat.svelte"), loadingComponent: RouteLoading }),
     "*": wrap({ asyncComponent: () => import("./routes/Activity.svelte"), loadingComponent: RouteLoading }),
   };
@@ -60,6 +61,7 @@
     "/performance": "Performance",
     "/hardware": "Hardware",
     "/rg": "RG GPUs",
+    "/results": "Results",
     "/tailcat": "Tailcat",
   };
 
