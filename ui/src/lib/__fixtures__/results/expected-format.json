@@ -1,0 +1,452 @@
+[
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "dgx-vllm-fn@v030-arma/decode_short",
+  "expected": "32.2"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "dgx-vllm-fn@8a72/decode_short",
+  "expected": "30.1"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "dgx-sglang-27b@0928/decode_short",
+  "expected": "22.9"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "V1-09b/decode_short",
+  "expected": "95.2"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "dgx-sglang-27b-vl@0928/decode_short",
+  "expected": "12.5"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_short",
+  "expected": "57.1"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_short",
+  "expected": "58.3"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "dgx-vllm-fn@v030-arma/decode_balanced",
+  "expected": "28.6"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "dgx-vllm-fn@8a72/decode_balanced",
+  "expected": "32.6"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "dgx-sglang-27b@0928/decode_balanced",
+  "expected": "21.0"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "V1-09b/decode_balanced",
+  "expected": "95.2"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "dgx-sglang-27b-vl@0928/decode_balanced",
+  "expected": "12.5"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_balanced",
+  "expected": "55.1"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_balanced",
+  "expected": "56.1"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "dgx-vllm-fn@v030-arma/decode_4stream",
+  "expected": "~110"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "dgx-vllm-fn@8a72/decode_4stream",
+  "expected": "~91"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "dgx-sglang-27b@0928/decode_4stream",
+  "expected": "44.5"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "V1-09b/decode_4stream",
+  "expected": "309"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "dgx-sglang-27b-vl@0928/decode_4stream",
+  "expected": "24"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_4stream",
+  "expected": "113"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_4stream",
+  "expected": "115"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Prefill tok/s",
+  "measurement": "dgx-vllm-fn@v030-arma/prefill_cold",
+  "expected": "~2,170"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Prefill tok/s",
+  "measurement": "dgx-vllm-fn@8a72/prefill_cold",
+  "expected": "~1,759"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Prefill tok/s",
+  "measurement": "dgx-sglang-27b@0928/prefill_cold",
+  "expected": "2,521–2,620"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Prefill tok/s",
+  "measurement": "V1-09b/prefill_cold",
+  "expected": "11,492–11,539"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Prefill tok/s",
+  "measurement": "dgx-sglang-27b-vl@0928/prefill_cold",
+  "expected": "2,656–2,692"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "dgx-vllm-fn@v030-arma/decode_short",
+  "expected": "32.16 / 32.16"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "dgx-vllm-fn@8a72/decode_short",
+  "expected": "30.12 / 30.15"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "dgx-sglang-27b@0928/decode_short",
+  "expected": "22.95 / 22.93"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "V1-09b/decode_short",
+  "expected": "95.24 / 95.23"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "dgx-sglang-27b-vl@0928/decode_short",
+  "expected": "12.51 / 12.50"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_short",
+  "expected": "57.14"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_short",
+  "expected": "58.32 / 58.27"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "dgx-vllm-fn@v030-arma/decode_balanced",
+  "expected": "28.62 / 28.53"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "dgx-vllm-fn@8a72/decode_balanced",
+  "expected": "32.58 / 32.58"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "dgx-sglang-27b@0928/decode_balanced",
+  "expected": "20.98 / 20.96"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "V1-09b/decode_balanced",
+  "expected": "95.23 / 95.22"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "dgx-sglang-27b-vl@0928/decode_balanced",
+  "expected": "12.50 / 12.48"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_balanced",
+  "expected": "55.10"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_balanced",
+  "expected": "56.15 / 56.09"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "dgx-vllm-fn@v030-arma/decode_4stream",
+  "expected": "108.9 / 111.2"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "dgx-vllm-fn@8a72/decode_4stream",
+  "expected": "88.5 / 94.0"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "dgx-sglang-27b@0928/decode_4stream",
+  "expected": "44.3 / 44.6"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "V1-09b/decode_4stream",
+  "expected": "274.3 / 308.6"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "dgx-sglang-27b-vl@0928/decode_4stream",
+  "expected": "23.9 / 23.9"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_4stream",
+  "expected": "112.6"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_4stream",
+  "expected": "114.8 / 115.0"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "dgx-vllm-fn@v030-arma/prefill_cold",
+  "expected": "2,169 / 2,174"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "dgx-vllm-fn@8a72/prefill_cold",
+  "expected": "1,745 / 1,773"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "dgx-sglang-27b@0928/prefill_cold",
+  "expected": "2,521 / 2,620"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "V1-09b/prefill_cold",
+  "expected": "11,492 / 11,539"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "dgx-sglang-27b-vl@0928/prefill_cold",
+  "expected": "2,656 / 2,692"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "dgx-vllm-fn@v030-arma/ttft_cold",
+  "expected": "1.753 / 1.749"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "dgx-vllm-fn@8a72/ttft_cold",
+  "expected": "2.18 / 2.15"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "dgx-sglang-27b@0928/ttft_cold",
+  "expected": "1.51 / 1.45"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-09b/ttft_cold",
+  "expected": "0.331 / 0.330"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "dgx-vllm-fn@v030-arma/accept_len",
+  "expected": "2.28"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "dgx-vllm-fn@8a72/accept_len",
+  "expected": "2.25 / 2.25"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "dgx-sglang-27b@0928/accept_len",
+  "expected": "2.52"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len, thinking on",
+  "measurement": "dgx-vllm-fn@v030-arma/accept_len/thinking-on",
+  "expected": "2.28"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len, thinking on",
+  "measurement": "dgx-sglang-27b@0928/accept_len/thinking-on",
+  "expected": "2.80"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "dgx-vllm-fn@v030-arma/steps_per_s",
+  "expected": "13.27"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "dgx-vllm-fn@8a72/steps_per_s",
+  "expected": "13.48 / 13.49"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "dgx-sglang-27b@0928/steps_per_s",
+  "expected": "8.86"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s, thinking on",
+  "measurement": "dgx-vllm-fn@v030-arma/steps_per_s/thinking-on",
+  "expected": "12.76"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s, thinking on",
+  "measurement": "dgx-sglang-27b@0928/steps_per_s/thinking-on",
+  "expected": "8.85"
+ },
+ {
+  "view": "cross-host",
+  "header": "140k-frame decode",
+  "measurement": "dgx-vllm-fn@v030-arma/image_decode/120f",
+  "expected": "46.6–47.5"
+ },
+ {
+  "view": "cross-host",
+  "header": "140k-frame decode",
+  "measurement": "dgx-vllm-fn@8a72/image_decode/120f",
+  "expected": "48.4"
+ },
+ {
+  "view": "cross-host",
+  "header": "140k-frame decode",
+  "measurement": "V1-09b/image_decode/120f",
+  "expected": "93.6"
+ },
+ {
+  "view": "cross-host",
+  "header": "140k-frame TTFT",
+  "measurement": "dgx-vllm-fn@v030-arma/image_ttft/120f",
+  "expected": "82.8 / 82.8"
+ },
+ {
+  "view": "cross-host",
+  "header": "140k-frame TTFT",
+  "measurement": "dgx-vllm-fn@8a72/image_ttft/120f",
+  "expected": "128.8"
+ },
+ {
+  "view": "cross-host",
+  "header": "140k-frame TTFT",
+  "measurement": "V1-09b/image_ttft/120f",
+  "expected": "25.1"
+ },
+ {
+  "view": "cross-host",
+  "header": "140k-frame JSON ok",
+  "measurement": "dgx-vllm-fn@v030-arma/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": "cross-host",
+  "header": "140k-frame JSON ok",
+  "measurement": "dgx-vllm-fn@8a72/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": "cross-host",
+  "header": "140k-frame JSON ok",
+  "measurement": "V1-09b/image_json_ok/120f",
+  "expected": "120"
+ }
+]

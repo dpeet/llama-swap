@@ -553,3 +553,63 @@ export async function grabRg(req: RgGrabRequest): Promise<RgGrabResponse> {
 export async function releaseRg(job: string, force = false): Promise<void> {
   await rgRequest<unknown>("/api/rg/release", force ? { job, confirm: true, force: true } : { job, confirm: true });
 }
+
+/** A failed /api/results/* fetch, carrying llama-swap's error code (results_not_configured, results_file_missing, …). */
+export class ResultsApiError extends Error {
+  constructor(
+    message: string,
+    /** `error` from the body, or bad_response for a 2xx that isn't the expected file. */
+    readonly code: string | null,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ResultsApiError";
+  }
+}
+
+export interface ResultsFiles {
+  /** Parsed catalog.json, still unvalidated (lib/results normalizeResults checks it). */
+  catalog: unknown;
+  measurementsText: string;
+}
+
+// The rgRequest pattern for the results files: read the body either way, turn
+// the server's {"error", "detail"} into a coded error, and refuse a 2xx that
+// isn't the file (an HTML page from a proxy in front would otherwise load as
+// an empty or garbage result set).
+async function resultsRequest(name: "catalog.json" | "measurements.jsonl"): Promise<string> {
+  const response = await fetch(`/api/results/${name}`);
+  const text = await response.text();
+  if (!response.ok) {
+    let data: Record<string, unknown> | null = null;
+    try {
+      data = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      data = null;
+    }
+    const field = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
+    const code = field(data?.error);
+    const detail = field(data?.detail);
+    throw new ResultsApiError(detail ?? code ?? `Results request failed: ${response.status}`, code, response.status);
+  }
+  const contentType = response.headers.get("Content-Type") ?? "";
+  if (contentType.includes("text/html")) {
+    throw new ResultsApiError(`${name} came back as an HTML page`, "bad_response", response.status);
+  }
+  return text;
+}
+
+/** Fetches catalog.json and measurements.jsonl in parallel. A catalog that isn't JSON is an error. */
+export async function getResults(): Promise<ResultsFiles> {
+  const [catalogText, measurementsText] = await Promise.all([
+    resultsRequest("catalog.json"),
+    resultsRequest("measurements.jsonl"),
+  ]);
+  let catalog: unknown;
+  try {
+    catalog = JSON.parse(catalogText);
+  } catch {
+    throw new ResultsApiError("catalog.json is not valid JSON", "bad_response", 200);
+  }
+  return { catalog, measurementsText };
+}
