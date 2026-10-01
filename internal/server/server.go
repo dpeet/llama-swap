@@ -76,6 +76,10 @@ type Server struct {
 	// LLAMA_SWAP_RG_API_URL is unset, in which case /api/rg/* answers 404.
 	rgProxy http.Handler
 
+	// resultsDir is the benchmark results directory served at
+	// /api/results/{name}. Empty when LLAMA_SWAP_RESULTS_DIR is unset.
+	resultsDir string
+
 	mux     *http.ServeMux
 	handler http.Handler
 
@@ -259,6 +263,7 @@ func New(cfg config.Config, logs *logmon.Group, perfMon *perf.Monitor, st store.
 		local:         local,
 		peer:          peer,
 		rgProxy:       rgProxy,
+		resultsDir:    os.Getenv(resultsDirEnv),
 		shutdownCtx:   shutdownCtx,
 		shutdownFn:    shutdownFn,
 	}
@@ -428,6 +433,8 @@ func (s *Server) routes() {
 	mux.Handle("GET /api/captures/{id}", apiChain.ThenFunc(s.handleAPICapture))
 	// Rogues Gallery GPU daemon (rg-api), proxied for the RG GPUs page.
 	mux.Handle("/api/rg/{rgPath...}", apiChain.ThenFunc(s.handleRG))
+	// Benchmark results files for the Results page (allowlisted, read-only).
+	mux.Handle("GET /api/results/{name}", apiChain.ThenFunc(s.handleResults))
 
 	// Stateless MCP server exposing llama-swap's own documentation as tools,
 	// consumed by the Playground's agentic chat and by any external MCP client.
