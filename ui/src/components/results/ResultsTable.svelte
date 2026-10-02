@@ -45,7 +45,7 @@
   <Table.Root>
     <Table.Header>
       <Table.Row>
-        <Table.Head aria-sort={ariaSort("config")} class="text-muted-foreground min-w-64">
+        <Table.Head aria-sort={ariaSort("config")} class="text-muted-foreground min-w-48">
           {@render sortHeader("config", "Config", "Sort by config label", "asc")}
         </Table.Head>
         {#each columns as column (column.id)}
