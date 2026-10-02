@@ -141,7 +141,7 @@
         <Input
           id="results-yours"
           bind:ref={yoursInput}
-          class="h-10 w-36 text-lg md:text-lg"
+          class="w-36"
           inputmode="decimal"
           autocomplete="off"
           placeholder="e.g. 150"
@@ -155,7 +155,7 @@
     <div class="space-y-1">
       <label class="text-muted-foreground text-xs" for="results-compare-metric">Metric</label>
       <Select.Root type="single" value={metric} onValueChange={(v) => v && onchange({ compareMetric: v as CompareMetric })}>
-        <Select.Trigger id="results-compare-metric" class="w-40 data-[size=default]:h-10">{COMPARE_METRIC_LABELS[metric]}</Select.Trigger>
+        <Select.Trigger id="results-compare-metric" class="w-40">{COMPARE_METRIC_LABELS[metric]}</Select.Trigger>
         <Select.Content>
           {#each COMPARE_METRICS as m (m)}
             <Select.Item value={m}>{COMPARE_METRIC_LABELS[m]}</Select.Item>
@@ -166,7 +166,7 @@
     <div class="space-y-1">
       <label class="text-muted-foreground text-xs" for="results-compare-family">Model family</label>
       <Select.Root type="single" value={family} onValueChange={(v) => v && onchange({ compareFamily: v })}>
-        <Select.Trigger id="results-compare-family" class="w-32 data-[size=default]:h-10">{family}</Select.Trigger>
+        <Select.Trigger id="results-compare-family" class="w-32">{family}</Select.Trigger>
         <Select.Content>
           {#each families as f (f)}
             <Select.Item value={f}>{f}</Select.Item>
