@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { normalizeResults } from "./results";
-import { hostRows, rowRatio, shortConfigName, shortGpu, type HostRow } from "./resultsCompare";
+import { compareDomainMax, hostRows, niceMax, rowRatio, shortConfigName, shortGpu, type HostRow } from "./resultsCompare";
 
 function load(dir: string) {
   const fixtureDir = fileURLToPath(new URL(dir, import.meta.url));
@@ -87,6 +87,23 @@ describe("hostRows (trial fixture)", () => {
     expect(shortGpu("H100 PCIe")).toBe("H100");
     expect(shortGpu("GH200")).toBe("GH200");
     expect(shortConfigName(trial.configs["V1-09b"])).toBe("V1-09b vllm");
+  });
+});
+
+describe("compareDomainMax", () => {
+  it("rounds the axis end up to a nice number", () => {
+    expect(niceMax(0)).toBe(1);
+    expect(niceMax(0.9)).toBeCloseTo(1, 12);
+    expect(niceMax(221.25 * 1.04)).toBe(250);
+    expect(niceMax(1.751 * 1.04)).toBe(2);
+    expect(niceMax(100)).toBe(100);
+  });
+
+  it("covers rows, best ticks, every plotted config and yours, so rows and the dot strip share one scale", () => {
+    const rows = hostRows(trial, "flash-next", "decode_short");
+    expect(compareDomainMax(rows, [], null)).toBe(100); // H100 95.235 × 1.04 = 99.04
+    expect(compareDomainMax(rows, [130], null)).toBe(150); // a plotted config past every row
+    expect(compareDomainMax(rows, [], 150)).toBe(200); // yours past everything: 156 → 200
   });
 });
 
