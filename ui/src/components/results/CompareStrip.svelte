@@ -30,6 +30,19 @@
   let ratios = $derived(compareRatios(points, yours));
   let productionCount = $derived(points.filter((p) => p.dgxProduction).length);
   let nearestRg = $derived(ratios.find((r) => r.kind === "nearest-rg")?.point ?? null);
+  // The legend names only what is plotted.
+  let plotted = $derived({
+    production: points.some((p) => p.dgxProduction),
+    otherDgx: points.some((p) => p.site !== "rg" && !p.dgxProduction),
+    rg: points.some((p) => p.site === "rg"),
+  });
+
+  // RG marks use chart tokens, not a palette hue, because amber equalled
+  // --primary (the DGX production fill) under the Amber theme. chart-3 (navy)
+  // light and chart-4 (purple) dark, because no theme's primary is either; the
+  // nearest is violet-dark's, where square-vs-circle still tells them apart.
+  const RG_FILL = "fill-chart-3 dark:fill-chart-4";
+  const RG_SWATCH = "bg-chart-3 dark:bg-chart-4";
 
   function ratioName(r: CompareRatio): string {
     const config = r.point.config;
@@ -160,19 +173,21 @@
     {#if filters.yours.trim() !== "" && yours === null}
       <span class="text-destructive">Type a positive number, like 150 or 1,200.</span>
     {:else if yours !== null && ratios.length > 0}
-      <span class="text-muted-foreground">{formatNumber(yours)} {info.unit} is</span>
-      {#each ratios as r, i (r.point.config.id + r.kind)}
-        {#if i > 0}<span class="text-muted-foreground"> · </span>{/if}
-        <button
-          type="button"
-          class="hover:bg-muted cursor-pointer rounded px-0.5 font-semibold"
-          onclick={() => onselect(r.point.config.id)}
-          title="Open {r.point.config.label}"
-        >
-          {formatRatio(r.ratio)} {ratioName(r)}
-        </button>
-      {/each}
-      {#if !info.higherIsBetter}<span class="text-muted-foreground"> (lower is better)</span>{/if}
+      <!-- Gap, not separator glyphs, because Svelte trims a span's edge spaces and long chips wrap. -->
+      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span class="text-muted-foreground">{formatNumber(yours)} {info.unit} is</span>
+        {#each ratios as r (r.point.config.id + r.kind)}
+          <button
+            type="button"
+            class="hover:bg-muted cursor-pointer rounded px-0.5 text-left font-semibold"
+            onclick={() => onselect(r.point.config.id)}
+            title="Open {r.point.config.label}"
+          >
+            {formatRatio(r.ratio)} {ratioName(r)}
+          </button>
+        {/each}
+        {#if !info.higherIsBetter}<span class="text-muted-foreground">(lower is better)</span>{/if}
+      </div>
     {:else if yours !== null}
       <span class="text-muted-foreground">No DGX production or RG config has this metric under these filters.</span>
     {:else}
@@ -218,18 +233,33 @@
             role="button"
             tabindex="0"
             aria-label="{point.config.label}, {formatMeasurement(point.measurement, { aggregate: 'mean' })} {info.unit}"
-            class="cursor-pointer outline-none focus-visible:opacity-70"
+            class="group cursor-pointer outline-none"
             onclick={() => onselect(point.config.id)}
             onkeydown={(e) => onDotKey(e, point.config.id)}
           >
             <title>{pointTitle(point)}</title>
+            <!-- keyboard focus ring, 3 px outside the mark in its own shape -->
+            {#if point.site === "rg"}
+              <rect
+                x={px - DOT_R - 3}
+                y={cy - DOT_R - 3}
+                width={(DOT_R + 3) * 2}
+                height={(DOT_R + 3) * 2}
+                fill="none"
+                stroke="var(--ring)"
+                stroke-width="2"
+                class="opacity-0 group-focus-visible:opacity-100"
+              />
+            {:else}
+              <circle cx={px} {cy} r={r + 3} fill="none" stroke="var(--ring)" stroke-width="2" class="opacity-0 group-focus-visible:opacity-100" />
+            {/if}
             {#if point.site === "rg"}
               <rect
                 x={px - DOT_R}
                 y={cy - DOT_R}
                 width={DOT_R * 2}
                 height={DOT_R * 2}
-                class="fill-amber-500 dark:fill-amber-400"
+                class={RG_FILL}
                 stroke={point === nearestRg ? "currentColor" : "none"}
                 stroke-width="1.5"
               />
@@ -260,9 +290,15 @@
   </div>
 
   <div class="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-    <span class="inline-flex items-center gap-1.5"><span class="bg-primary inline-block size-2.5 rounded-full"></span>DGX production</span>
-    <span class="inline-flex items-center gap-1.5"><span class="inline-block size-2.5 rounded-full border-[1.5px] border-current"></span>other DGX</span>
-    <span class="inline-flex items-center gap-1.5"><span class="inline-block size-2.5 bg-amber-500 dark:bg-amber-400"></span>RG GPU</span>
+    {#if plotted.production}
+      <span class="inline-flex items-center gap-1.5"><span class="bg-primary inline-block size-2.5 rounded-full"></span>DGX production</span>
+    {/if}
+    {#if plotted.otherDgx}
+      <span class="inline-flex items-center gap-1.5"><span class="inline-block size-2.5 rounded-full border-[1.5px] border-current"></span>other DGX</span>
+    {/if}
+    {#if plotted.rg}
+      <span class="inline-flex items-center gap-1.5"><span class="inline-block size-2.5 {RG_SWATCH}"></span>RG GPU</span>
+    {/if}
     <span>{points.length} config{points.length === 1 ? "" : "s"}, mean of runs{filters.comparability === "fixed" ? ", fixed harness" : ", all harnesses"}. Tap a dot for details.</span>
   </div>
 </section>

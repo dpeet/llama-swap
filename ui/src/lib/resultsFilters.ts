@@ -3,6 +3,7 @@
 
 import {
   aggregateNumber,
+  byCodepoint,
   isFixedHarness,
   lanesForConfig,
   LANE_STATUSES,
@@ -218,7 +219,7 @@ export function shownMeasurements(data: ResultsData, filters: ResultsFilters): M
     out.set(m.config, list);
   }
   for (const list of out.values()) {
-    list.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? "") || a.id.localeCompare(b.id));
+    list.sort((a, b) => byCodepoint(a.date ?? "", b.date ?? "") || byCodepoint(a.id, b.id));
   }
   return out;
 }

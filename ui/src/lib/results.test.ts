@@ -1,12 +1,15 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   aggregateNumber,
+  byCodepoint,
   formatMeasurement,
   formatNumber,
   formatRatio,
+  LANE_STATUSES,
   lanesForConfig,
+  METRICS,
   nearestByRatio,
   normalizeResults,
   predecessorsOf,
@@ -306,5 +309,70 @@ describe("predecessorsOf", () => {
     const text = [line({ id: "c/new" }), line({ id: "c/old", superseded_by: "c/new" })].join("\n");
     const data = normalizeResults(minimalCatalog(), text);
     expect(predecessorsOf(data, new Set(["c/new"])).map((m) => m.id)).toEqual(["c/old"]);
+  });
+});
+
+// The live schema, not a fixture copy, because the point is to catch the UI's
+// lists falling behind the schema; skipped when docs/results isn't mounted.
+const liveSchemaPath = "/opt/ai/artisanal-inference/docs/results/schema.json";
+
+describe.skipIf(!existsSync(liveSchemaPath))("UI lists match schema.json", () => {
+  const schema = JSON.parse(readFileSync(liveSchemaPath, "utf8")) as {
+    $defs: {
+      metric: { enum: string[]; "x-metrics": Record<string, { unit: string; label: string }> };
+      lane: { properties: { status: { enum: string[] } } };
+    };
+  };
+
+  it("knows every metric, with the schema's label and unit", () => {
+    const { enum: metricEnum, "x-metrics": xMetrics } = schema.$defs.metric;
+    for (const metric of new Set([...metricEnum, ...Object.keys(xMetrics)])) {
+      expect(Object.hasOwn(METRICS, metric), `METRICS lacks ${metric}`).toBe(true);
+      if (xMetrics[metric]) {
+        expect(METRICS[metric].label, metric).toBe(xMetrics[metric].label);
+        expect(METRICS[metric].unit, metric).toBe(xMetrics[metric].unit);
+      }
+    }
+  });
+
+  it("knows every lane status", () => {
+    const known: readonly string[] = LANE_STATUSES;
+    for (const status of schema.$defs.lane.properties.status.enum) expect(known, status).toContain(status);
+  });
+});
+
+describe("normalizeResults with Object.prototype names as ids", () => {
+  const base = minimalCatalog().configs as Record<string, Record<string, unknown>>;
+  // JSON.parse, because an object literal's "__proto__" key sets the prototype instead of an own key.
+  const catalog = JSON.parse(
+    JSON.stringify({
+      ...minimalCatalog(),
+      configs: { constructor: { ...base.c, label: "Ctor" }, toString: { ...base.c, label: "ToString" } },
+    }).replace('"constructor"', '"__proto__":' + JSON.stringify({ ...base.c, label: "Proto" }) + ',"constructor"'),
+  );
+  catalog.lanes = { l: { label: "L", host: "h", family: "flash-next", status: "production", current_config: "hasOwnProperty" } };
+  const jsonl = [
+    line({ id: "constructor/decode_short", config: "constructor" }),
+    line({ id: "__proto__/decode_short", config: "__proto__" }),
+    line({ id: "valueOf/decode_short", config: "valueOf" }),
+  ].join("\n");
+  const data = normalizeResults(catalog, jsonl);
+
+  it("keeps such ids as plain records", () => {
+    expect(Object.keys(data.configs).sort()).toEqual(["__proto__", "constructor", "toString"]);
+    expect(data.configs["__proto__"].label).toBe("Proto");
+    expect(data.configs["constructor"].label).toBe("Ctor");
+    expect(data.measurements.map((m) => m.config)).toEqual(["constructor", "__proto__"]);
+  });
+
+  it("rejects references to inherited names that aren't records", () => {
+    expect(data.rejected.map((r) => r.id)).toEqual(["l", "valueOf/decode_short"]);
+    expect(data.hosts["constructor"]).toBeUndefined();
+  });
+});
+
+describe("byCodepoint", () => {
+  it("orders by codepoint as Python's sort does, not by locale", () => {
+    expect(["b", "a", "B", "_x", "10", "9"].sort(byCodepoint)).toEqual(["10", "9", "B", "_x", "a", "b"]);
   });
 });
