@@ -175,3 +175,20 @@ export function shortConfigName(config: Config): string {
 export function plainText(md: string): string {
   return md.replace(/`/g, "");
 }
+
+/** The axis end: the smallest 1/1.2/1.5/2/2.5/3/4/5/6/8 × 10ⁿ at or above `value`, so the ticks read as round numbers. */
+export function niceMax(value: number): number {
+  if (!(value > 0)) return 1;
+  const power = 10 ** Math.floor(Math.log10(value));
+  for (const m of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * power >= value) return m * power;
+  return 10 * power;
+}
+
+/**
+ * The one x-scale end the host rows and the "show all" dot strip share, so yours sits at the same x in both:
+ * the nice max just past the largest row value, best tick, plotted config and yours.
+ */
+export function compareDomainMax(rows: HostRow[], pointValues: number[], yours: number | null): number {
+  const values = [yours ?? 0, ...pointValues, ...rows.flatMap((r) => [r.value?.value ?? 0, r.best?.value ?? 0])];
+  return niceMax(Math.max(...values) * 1.04);
+}

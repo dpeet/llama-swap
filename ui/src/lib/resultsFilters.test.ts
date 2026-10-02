@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { normalizeResults } from "./results";
 import {
   activeFilterCount,
+  canonicalYours,
   compareRatios,
   comparePoints,
   configHaystack,
@@ -191,5 +192,27 @@ describe("compare strip", () => {
     expect(parseYours("")).toBeNull();
     expect(parseYours("-3")).toBeNull();
     expect(parseYours("abc")).toBeNull();
+  });
+
+  it("takes a TTFT in ms or s, only for a metric in seconds", () => {
+    expect(parseYours("150ms", "s")).toBeCloseTo(0.15, 12);
+    expect(parseYours("150 ms", "s")).toBeCloseTo(0.15, 12);
+    expect(parseYours("1,200MS", "s")).toBeCloseTo(1.2, 12);
+    expect(parseYours("0.4s", "s")).toBe(0.4);
+    expect(parseYours("0.4", "s")).toBe(0.4);
+    expect(parseYours("ms", "s")).toBeNull();
+    expect(parseYours("150ms", "tok/s")).toBeNull();
+    expect(parseYours("150ms")).toBeNull();
+  });
+
+  it("keeps the URL's number in the metric's unit", () => {
+    expect(canonicalYours("150ms", "s")).toBe("0.15");
+    expect(canonicalYours("150 ms", "s")).toBe("0.15");
+    expect(canonicalYours("300ms", "s")).toBe("0.3");
+    expect(canonicalYours("0.4 s", "s")).toBe("0.4");
+    expect(canonicalYours("0.4", "s")).toBe("0.4");
+    expect(canonicalYours("150m", "s")).toBe("150m");
+    expect(canonicalYours("150ms", "tok/s")).toBe("150ms");
+    expect(canonicalYours("1,200", "tok/s")).toBe("1,200");
   });
 });

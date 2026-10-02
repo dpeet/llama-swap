@@ -10,6 +10,7 @@
     type CompareRatio,
     type ResultsFilters,
   } from "../../lib/resultsFilters";
+  import { niceMax, plainText } from "../../lib/resultsCompare";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
 
@@ -22,13 +23,29 @@
     onselect: (configId: string) => void;
     /** Under HostCompare's "show all configs": no controls or ratio line of its own, because the rows above carry them. */
     embedded?: boolean;
+    /** The x-scale end, when a parent shares one with its own marks (HostCompare's rows). */
+    domainMax?: number;
+    /** A grid wrapper and the cell the plot sits in, so the plot spans the same x range as the parent's bar track. */
+    plotGrid?: string;
+    plotCell?: string;
   }
 
-  let { data, filters, points, families, onchange, onselect, embedded = false }: Props = $props();
+  let {
+    data,
+    filters,
+    points,
+    families,
+    onchange,
+    onselect,
+    embedded = false,
+    domainMax: sharedDomainMax,
+    plotGrid = "",
+    plotCell = "",
+  }: Props = $props();
 
   const ALL = "__all__";
   let info = $derived(metricInfo(filters.compareMetric));
-  let yours = $derived(parseYours(filters.yours));
+  let yours = $derived(parseYours(filters.yours, info.unit));
   let ratios = $derived(compareRatios(points, yours));
   let productionCount = $derived(points.filter((p) => p.dgxProduction).length);
   let nearestRg = $derived(ratios.find((r) => r.kind === "nearest-rg")?.point ?? null);
@@ -59,22 +76,16 @@
   // ---- Geometry: plain SVG in CSS pixels (bind:clientWidth), so labels stay
   // legible at 390 px instead of shrinking with a fixed viewBox.
   let width = $state(640);
-  const PAD_X = 14;
+  // Embedded, the plot spans the parent's bar track edge to edge, so x matches the bars.
+  let PAD_X = $derived(embedded ? 0 : 14);
   const DOT_R = 5;
   const PROD_R = 7;
   const ROW_STEP = 12;
-  const TOP = 34; // room for the "yours" and production labels
+  const LABEL_LINE = 12;
   const AXIS_GAP = 10;
   const AXIS_H = 22;
 
-  function niceMax(value: number): number {
-    if (!(value > 0)) return 1;
-    const power = 10 ** Math.floor(Math.log10(value));
-    for (const m of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * power >= value) return m * power;
-    return 10 * power;
-  }
-
-  let domainMax = $derived(niceMax(Math.max(...points.map((p) => p.value), yours ?? 0) * 1.04));
+  let domainMax = $derived(sharedDomainMax ?? niceMax(Math.max(...points.map((p) => p.value), yours ?? 0) * 1.04));
   let plotW = $derived(Math.max(width - PAD_X * 2, 100));
   const x = (value: number) => PAD_X + (value / domainMax) * plotW;
 
@@ -92,6 +103,32 @@
     });
   });
   let rows = $derived(Math.max(1, ...placed.map((p) => p.row + 1)));
+
+  // Value labels for the highlighted dots sit above the tallest stack under the label's own width, so no dot
+  // covers them; a label that would overlap an earlier one moves up a line at a time (its lane).
+  const labelText = (p: ComparePoint) => formatMeasurement(p.measurement, { aggregate: "mean" });
+  const labelWidth = (text: string) => text.length * 6.5 + 4; // 11px tabular digits run ~6.3px each
+  let labels = $derived.by(() => {
+    const out: { point: ComparePoint; px: number; text: string; lane: number; rise: number; left: number; right: number }[] = [];
+    for (const { point, px } of placed) {
+      if (!(point.dgxProduction || point === nearestRg)) continue;
+      const text = labelText(point);
+      const w = labelWidth(text);
+      const anchor = anchorFor(px);
+      const left = anchor === "start" ? px : anchor === "end" ? px - w : px - w / 2;
+      const right = left + w;
+      const under = placed.filter((q) => q.px + q.r >= left && q.px - q.r <= right);
+      // how far above the baseline the tallest mark under the label reaches
+      const rise = Math.max(0, ...under.map((q) => q.row * ROW_STEP + DOT_R + q.r));
+      let lane = 0;
+      const lift = (o: { rise: number; lane: number }) => o.rise + o.lane * LABEL_LINE;
+      while (out.some((o) => o.left < right && left < o.right && Math.abs(lift(o) - lift({ rise, lane })) < LABEL_LINE)) lane++;
+      out.push({ point, px, text, lane, rise, left, right });
+    }
+    return out;
+  });
+  // Room above the dots for the "yours" label and every label; 34 fits one label line over the tallest stack.
+  let TOP = $derived(34 + Math.max(0, ...labels.map((l) => l.rise + l.lane * LABEL_LINE - rows * ROW_STEP)));
   let baseY = $derived(TOP + rows * ROW_STEP);
   let axisY = $derived(baseY + AXIS_GAP);
   let height = $derived(axisY + AXIS_H);
@@ -109,7 +146,7 @@
 
   function pointTitle(p: ComparePoint): string {
     const host = data.hosts[p.config.host]?.label ?? p.config.host;
-    return `${p.config.label} · ${host}\n${formatMeasurement(p.measurement, { aggregate: "mean" })} ${info.unit} (mean of ${formatMeasurement(p.measurement)})`;
+    return `${plainText(p.config.label)} · ${host}\n${formatMeasurement(p.measurement, { aggregate: "mean" })} ${info.unit} (mean of ${formatMeasurement(p.measurement)})`;
   }
 
   function onDotKey(event: KeyboardEvent, id: string): void {
@@ -199,7 +236,7 @@
   </div>
   {/if}
 
-  <div class="mt-2 w-full" bind:clientWidth={width}>
+  <div class="mt-2 {plotGrid}"><div class="w-full min-w-0 {plotCell}" bind:clientWidth={width}>
     {#if points.length === 0}
       <p class="text-muted-foreground py-6 text-center text-sm">
         No config has a {COMPARE_METRIC_LABELS[filters.compareMetric].toLowerCase()} measurement under these filters.
@@ -232,11 +269,10 @@
 
         {#each placed as { point, px, row, r } (point.config.id)}
           {@const cy = dotY(row)}
-          {@const highlighted = point.dgxProduction || point === nearestRg}
           <g
             role="button"
             tabindex="0"
-            aria-label="{point.config.label}, {formatMeasurement(point.measurement, { aggregate: 'mean' })} {info.unit}"
+            aria-label="{plainText(point.config.label)}, {formatMeasurement(point.measurement, { aggregate: 'mean' })} {info.unit}"
             class="group cursor-pointer outline-none"
             onclick={() => onselect(point.config.id)}
             onkeydown={(e) => onDotKey(e, point.config.id)}
@@ -272,26 +308,33 @@
             {:else}
               <circle cx={px} {cy} r={DOT_R} fill="none" stroke="currentColor" stroke-width="1.5" class="text-muted-foreground" />
             {/if}
-            <!-- a larger invisible hit area, for fingers -->
-            <circle cx={px} {cy} r="11" fill="transparent" />
-            {#if highlighted}
-              <text
-                x={px}
-                y={cy - r - 4}
-                font-size="11"
-                font-weight={point.dgxProduction ? "600" : "400"}
-                fill="currentColor"
-                text-anchor={anchorFor(px)}
-                class={point.dgxProduction ? "text-foreground" : "text-muted-foreground"}
-              >
-                {formatMeasurement(point.measurement, { aggregate: "mean" })}
-              </text>
-            {/if}
+            <!-- the hit area: one beeswarm cell (a dot's spacing by the row pitch), so neighbours' targets never overlap -->
+            <rect x={px - DOT_R - 1} y={cy - ROW_STEP / 2} width={2 * DOT_R + 2} height={ROW_STEP} fill="transparent" />
           </g>
+        {/each}
+
+        <!-- value labels last, with a background halo, so no mark paints over them -->
+        {#each labels as { point, px, text, lane, rise } (point.config.id)}
+          <text
+            x={px}
+            y={baseY - rise - 4 - lane * LABEL_LINE}
+            font-size="11"
+            font-weight={point.dgxProduction ? "600" : "400"}
+            fill="currentColor"
+            stroke="var(--background)"
+            stroke-width="3"
+            stroke-linejoin="round"
+            paint-order="stroke"
+            text-anchor={anchorFor(px)}
+            class="pointer-events-none {point.dgxProduction ? 'text-foreground' : 'text-muted-foreground'}"
+            aria-hidden="true"
+          >
+            {text}
+          </text>
         {/each}
       </svg>
     {/if}
-  </div>
+  </div></div>
 
   <div class="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
     {#if plotted.production}

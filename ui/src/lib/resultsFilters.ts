@@ -306,10 +306,32 @@ export function compareRatios(points: ComparePoint[], yours: number | null): Com
   return out;
 }
 
-/** The typed number, or null when blank or not a positive number. Accepts "1,234" and "~95". */
-export function parseYours(text: string): number | null {
-  const cleaned = text.replace(/[,\s~≈]/g, "");
+/**
+ * The typed number in the metric's unit, or null when blank or not a positive number. Accepts "1,234" and "~95".
+ * For a metric in seconds (TTFT) it also takes an "ms" or "s" suffix, because quoted TTFTs usually come in ms:
+ * "150ms" and "150 ms" are 0.15.
+ */
+export function parseYours(text: string, unit = ""): number | null {
+  let cleaned = text.replace(/[,\s~≈]/g, "");
+  let scale = 1;
+  if (unit === "s") {
+    const suffix = /(ms|s)$/i.exec(cleaned);
+    if (suffix) {
+      cleaned = cleaned.slice(0, -suffix[1].length);
+      if (suffix[1].toLowerCase() === "ms") scale = 1 / 1000;
+    }
+  }
   if (cleaned === "") return null;
-  const value = Number(cleaned);
+  const value = Number(cleaned) * scale;
   return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * The typed text as the URL keeps it: a suffixed time ("150ms") becomes its plain value in seconds ("0.15"),
+ * so a shared link is always in the metric's unit; anything else is kept as typed, so an invalid entry still shows.
+ */
+export function canonicalYours(text: string, unit = ""): string {
+  if (unit !== "s" || !/s\s*$/i.test(text)) return text;
+  const value = parseYours(text, unit);
+  return value === null ? text : String(Number(value.toPrecision(12)));
 }
