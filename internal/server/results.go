@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"path/filepath"
 )
 
 // resultsDirEnv names the env var holding the benchmark results directory. It
@@ -39,7 +38,9 @@ func (s *Server) handleResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	f, err := os.Open(filepath.Join(s.resultsDir, name))
+	// OpenInRoot (not Open of a joined path) because a symlink planted in the
+	// results dir must not be able to point the server at a file outside it.
+	f, err := os.OpenInRoot(s.resultsDir, name)
 	if err == nil {
 		defer f.Close()
 	}
@@ -47,13 +48,18 @@ func (s *Server) handleResults(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		info, err = f.Stat()
 	}
+	if err == nil && !info.Mode().IsRegular() {
+		err = fmt.Errorf("%s is not a regular file (mode %s)", name, info.Mode())
+	}
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			writeRGError(w, http.StatusNotFound, "results_file_missing", name+" does not exist in "+resultsDirEnv)
 			return
 		}
+		// The real error goes to the log only, because it carries host paths
+		// that the tailnet-readable API has no reason to expose.
 		s.logs.ProxyLogs.Warnf("results: reading %s: %v", name, err)
-		writeRGError(w, http.StatusInternalServerError, "results_read_failed", err.Error())
+		writeRGError(w, http.StatusInternalServerError, "results_read_failed", "could not read "+name)
 		return
 	}
 
