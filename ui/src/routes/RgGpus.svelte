@@ -101,6 +101,7 @@
   // ---- Grab form ----------------------------------------------------------
 
   const BEST = "best";
+  const NEXT_GH200 = "next-gh200";
   let nodeChoice = $state(BEST);
   let family = $state<RgFamilyChoice>("flash-next");
   let duration = $state("2h");
@@ -109,8 +110,9 @@
 
   // Best available can serve any family some node has a profile for.
   let selectedNode = $derived<RgNode | null>(overview?.nodes.find((n) => n.name === nodeChoice) ?? null);
+  let choiceNodes = $derived(selectedNode ? [selectedNode] : (overview?.nodes ?? []).filter((n) => nodeChoice !== NEXT_GH200 || n.gpu === "GH200"));
   let families = $derived(
-    familyOptions(selectedNode ?? { profiles: overview?.nodes.flatMap((n) => n.profiles) ?? [] }),
+    familyOptions({ profiles: choiceNodes.flatMap((n) => n.profiles) }),
   );
 
   function syncFamily(): void {
@@ -122,12 +124,12 @@
   // MaxTime for the chosen node, or the largest one for best available
   // (rg-api filters the rest).
   let maxMinutes = $derived.by(() => {
-    const nodes = selectedNode ? [selectedNode] : (overview?.nodes ?? []);
+    const nodes = choiceNodes;
     const limits = nodes.map((n) => parseDuration(n.max_time)).filter((m): m is number => m !== null);
     return limits.length > 0 ? Math.max(...limits) : null;
   });
   let maxTimeLabel = $derived(
-    selectedNode?.max_time ?? overview?.nodes.map((n) => n.max_time).sort((a, b) => (parseDuration(b) ?? 0) - (parseDuration(a) ?? 0))[0] ?? "",
+    selectedNode?.max_time ?? choiceNodes.map((n) => n.max_time).sort((a, b) => (parseDuration(b) ?? 0) - (parseDuration(a) ?? 0))[0] ?? "",
   );
 
   let durationError = $derived.by(() => {
@@ -142,7 +144,7 @@
     if (family === "hold-only") return "Best available";
     return `Best available · ${best ?? "none idle"}`;
   }
-  let nodeLabel = $derived(nodeChoice === BEST ? bestLabel() : nodeChoice);
+  let nodeLabel = $derived(nodeChoice === BEST ? bestLabel() : nodeChoice === NEXT_GH200 ? "Next available GH200" : nodeChoice);
 
   // A named node where we already hold queues the grab behind that hold, because
   // rg-hold.sh refuses a second hold there otherwise (DUPLICATE).
@@ -158,7 +160,7 @@
   }
 
   function grabSummary(result: RgGrabResponse, queuedAfter: string | null): string {
-    const where = result.node ? ` on ${result.node}` : "";
+    const where = result.node === NEXT_GH200 ? " on the next available GH200" : result.node ? ` on ${result.node}` : "";
     const what = result.profile ? ` serving ${result.profile}` : ", hold only";
     switch (result.status) {
       case "placed":
@@ -318,6 +320,7 @@
               <Select.Trigger id="rg-node" class="w-full">{nodeLabel}</Select.Trigger>
               <Select.Content>
                 <Select.Item value={BEST}>{bestLabel()}</Select.Item>
+                <Select.Item value={NEXT_GH200}>Next available GH200</Select.Item>
                 {#each overview.nodes as node (node.name)}
                   <Select.Item value={node.name}>{node.name} · {node.gpu} · {node.availability}</Select.Item>
                 {/each}
@@ -345,6 +348,9 @@
             </p>
           </div>
 
+          {#if nodeChoice === NEXT_GH200}
+            <p class="text-xs text-muted-foreground">Queues one hold for either GH200. Slurm assigns the node when it starts{family === "hold-only" ? "." : ", then the model boots."}</p>
+          {/if}
           {#if followJob}
             <p class="text-xs text-muted-foreground">
               You have hold {followJob} on {nodeChoice}, so this queues a new hold that can start once it ends{family === "hold-only" ? "" : ", then the model boots under it"}.
