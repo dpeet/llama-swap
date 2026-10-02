@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -123,5 +124,36 @@ func TestServer_ResultsIfNoneMatch304(t *testing.T) {
 	w = getResults(s, "/api/results/measurements.jsonl", "If-None-Match", etag)
 	if w.Code != http.StatusOK {
 		t.Errorf("after edit: status = %d, want 200", w.Code)
+	}
+}
+
+func TestServer_ResultsSymlinkOutsideRootRefused(t *testing.T) {
+	outside := t.TempDir()
+	secret := filepath.Join(outside, "secret.json")
+	if err := os.WriteFile(secret, []byte(`{"secret":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Symlink(secret, filepath.Join(dir, "catalog.json")); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	w := getResults(newResultsTestServer(t, dir), "/api/results/catalog.json")
+	if w.Code == http.StatusOK {
+		t.Fatalf("symlink escaping the results dir was served: %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "secret") {
+		t.Errorf("body leaks the target: %s", w.Body.String())
+	}
+}
+
+func TestServer_ResultsDirectoryIsReadFailure(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "schema.json"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w := getResults(newResultsTestServer(t, dir), "/api/results/schema.json")
+	assertResultsError(t, w, http.StatusInternalServerError, "results_read_failed")
+	if strings.Contains(w.Body.String(), dir) {
+		t.Errorf("error detail leaks the host path: %s", w.Body.String())
 	}
 }
