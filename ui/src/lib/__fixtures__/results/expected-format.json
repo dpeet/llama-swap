@@ -7,81 +7,9 @@
  },
  {
   "view": "fastest-way",
-  "header": "Short",
-  "measurement": "dgx-vllm-fn@8a72/decode_short",
-  "expected": "30.1"
- },
- {
-  "view": "fastest-way",
-  "header": "Short",
-  "measurement": "dgx-sglang-27b@0928/decode_short",
-  "expected": "22.9"
- },
- {
-  "view": "fastest-way",
-  "header": "Short",
-  "measurement": "V1-09b/decode_short",
-  "expected": "95.2"
- },
- {
-  "view": "fastest-way",
-  "header": "Short",
-  "measurement": "dgx-sglang-27b-vl@0928/decode_short",
-  "expected": "12.5"
- },
- {
-  "view": "fastest-way",
-  "header": "Short",
-  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_short",
-  "expected": "57.1"
- },
- {
-  "view": "fastest-way",
-  "header": "Short",
-  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_short",
-  "expected": "58.3"
- },
- {
-  "view": "fastest-way",
   "header": "Balanced",
   "measurement": "dgx-vllm-fn@v030-arma/decode_balanced",
   "expected": "28.6"
- },
- {
-  "view": "fastest-way",
-  "header": "Balanced",
-  "measurement": "dgx-vllm-fn@8a72/decode_balanced",
-  "expected": "32.6"
- },
- {
-  "view": "fastest-way",
-  "header": "Balanced",
-  "measurement": "dgx-sglang-27b@0928/decode_balanced",
-  "expected": "21.0"
- },
- {
-  "view": "fastest-way",
-  "header": "Balanced",
-  "measurement": "V1-09b/decode_balanced",
-  "expected": "95.2"
- },
- {
-  "view": "fastest-way",
-  "header": "Balanced",
-  "measurement": "dgx-sglang-27b-vl@0928/decode_balanced",
-  "expected": "12.5"
- },
- {
-  "view": "fastest-way",
-  "header": "Balanced",
-  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_balanced",
-  "expected": "55.1"
- },
- {
-  "view": "fastest-way",
-  "header": "Balanced",
-  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_balanced",
-  "expected": "56.1"
  },
  {
   "view": "fastest-way",
@@ -91,45 +19,51 @@
  },
  {
   "view": "fastest-way",
-  "header": "4-stream",
-  "measurement": "dgx-vllm-fn@8a72/decode_4stream",
-  "expected": "~91"
+  "header": "Prefill tok/s",
+  "measurement": "dgx-vllm-fn@v030-arma/prefill_cold",
+  "expected": "~2,170"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "dgx-vllm-fn@8a72/decode_short/2026-09-30",
+  "expected": "30.7"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "dgx-vllm-fn@8a72/decode_balanced/2026-09-30",
+  "expected": "27.9"
  },
  {
   "view": "fastest-way",
   "header": "4-stream",
-  "measurement": "dgx-sglang-27b@0928/decode_4stream",
-  "expected": "44.5"
- },
- {
-  "view": "fastest-way",
-  "header": "4-stream",
-  "measurement": "V1-09b/decode_4stream",
-  "expected": "309"
- },
- {
-  "view": "fastest-way",
-  "header": "4-stream",
-  "measurement": "dgx-sglang-27b-vl@0928/decode_4stream",
-  "expected": "24"
- },
- {
-  "view": "fastest-way",
-  "header": "4-stream",
-  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_4stream",
-  "expected": "113"
- },
- {
-  "view": "fastest-way",
-  "header": "4-stream",
-  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_4stream",
-  "expected": "115"
+  "measurement": "dgx-vllm-fn@8a72/decode_4stream/2026-09-30",
+  "expected": "~103"
  },
  {
   "view": "fastest-way",
   "header": "Prefill tok/s",
-  "measurement": "dgx-vllm-fn@v030-arma/prefill_cold",
-  "expected": "~2,170"
+  "measurement": "dgx-vllm-fn@8a72/prefill_cold/2026-09-30",
+  "expected": "~1,767"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "dgx-vllm-fn@8a72/decode_short",
+  "expected": "30.1"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "dgx-vllm-fn@8a72/decode_balanced",
+  "expected": "32.6"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "dgx-vllm-fn@8a72/decode_4stream",
+  "expected": "~91"
  },
  {
   "view": "fastest-way",
@@ -139,9 +73,93 @@
  },
  {
   "view": "fastest-way",
+  "header": "Short",
+  "measurement": "dgx-sglang-fn@0928/decode_short",
+  "expected": "28.3"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "dgx-sglang-fn@0928/decode_balanced",
+  "expected": "26.4"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "dgx-sglang-fn@0928/decode_4stream",
+  "expected": "~71"
+ },
+ {
+  "view": "fastest-way",
   "header": "Prefill tok/s",
-  "measurement": "dgx-sglang-27b@0928/prefill_cold",
-  "expected": "2,521–2,620"
+  "measurement": "dgx-sglang-fn@0928/prefill_cold",
+  "expected": "2,263–2,455"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "gh200-vllm-fn@69d3/decode_short",
+  "expected": "209.6"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "gh200-vllm-fn@69d3/decode_balanced",
+  "expected": "193.1"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "gh200-vllm-fn@69d3/decode_4stream",
+  "expected": "~540"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Prefill tok/s",
+  "measurement": "gh200-vllm-fn@69d3/prefill_cold",
+  "expected": "17,041–17,115"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "V1-06/decode_short",
+  "expected": "109.2"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "V1-06/decode_balanced",
+  "expected": "100.4"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "V1-06/decode_4stream",
+  "expected": "178"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Prefill tok/s",
+  "measurement": "V1-06/prefill_cold",
+  "expected": "1,154–1,170"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "V1-09b/decode_short",
+  "expected": "95.2"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "V1-09b/decode_balanced",
+  "expected": "95.2"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "V1-09b/decode_4stream",
+  "expected": "309"
  },
  {
   "view": "fastest-way",
@@ -151,15 +169,135 @@
  },
  {
   "view": "fastest-way",
-  "header": "Prefill tok/s",
-  "measurement": "dgx-sglang-27b-vl@0928/prefill_cold",
-  "expected": "2,656–2,692"
+  "header": "Short",
+  "measurement": "V2-06i/decode_short",
+  "expected": "51.9"
  },
  {
-  "view": "cross-host",
-  "header": "Short tok/s",
-  "measurement": "dgx-vllm-fn@v030-arma/decode_short",
-  "expected": "32.16 / 32.16"
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "V2-06i/decode_balanced",
+  "expected": "49.2"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "V2-06i/decode_4stream",
+  "expected": "70"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Prefill tok/s",
+  "measurement": "V2-06i/prefill_cold",
+  "expected": "504–508"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "dgx-sglang-27b@0928/decode_short",
+  "expected": "22.9"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "dgx-sglang-27b@0928/decode_balanced",
+  "expected": "21.0"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "dgx-sglang-27b@0928/decode_4stream",
+  "expected": "44.5"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Prefill tok/s",
+  "measurement": "dgx-sglang-27b@0928/prefill_cold",
+  "expected": "2,521–2,620"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "dgx-sglang-27b@0928/decode_short/thinking-on-cold",
+  "expected": "23.3"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "dgx-sglang-27b@0928/decode_balanced/thinking-on-cold",
+  "expected": "28.4"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "gh200-vllm-27b@69d3/decode_short",
+  "expected": "137.6"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "gh200-vllm-27b@69d3/decode_balanced",
+  "expected": "132.2"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "gh200-vllm-27b@69d3/decode_4stream",
+  "expected": "445"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Prefill tok/s",
+  "measurement": "gh200-vllm-27b@69d3/prefill_cold",
+  "expected": "15,365–15,415"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "V1-11/decode_short",
+  "expected": "154.2"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "V1-11/decode_balanced",
+  "expected": "126.2"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "V1-11/decode_4stream",
+  "expected": "484"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Prefill tok/s",
+  "measurement": "V1-11/prefill_cold",
+  "expected": "3,924–3,975"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Short",
+  "measurement": "V2-07w/decode_short",
+  "expected": "123.5"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Balanced",
+  "measurement": "V2-07w/decode_balanced",
+  "expected": "95.5"
+ },
+ {
+  "view": "fastest-way",
+  "header": "4-stream",
+  "measurement": "V2-07w/decode_4stream",
+  "expected": "366"
+ },
+ {
+  "view": "fastest-way",
+  "header": "Prefill tok/s",
+  "measurement": "V2-07w/prefill_cold",
+  "expected": "2,614–2,655"
  },
  {
   "view": "cross-host",
@@ -169,81 +307,9 @@
  },
  {
   "view": "cross-host",
-  "header": "Short tok/s",
-  "measurement": "dgx-sglang-27b@0928/decode_short",
-  "expected": "22.95 / 22.93"
- },
- {
-  "view": "cross-host",
-  "header": "Short tok/s",
-  "measurement": "V1-09b/decode_short",
-  "expected": "95.24 / 95.23"
- },
- {
-  "view": "cross-host",
-  "header": "Short tok/s",
-  "measurement": "dgx-sglang-27b-vl@0928/decode_short",
-  "expected": "12.51 / 12.50"
- },
- {
-  "view": "cross-host",
-  "header": "Short tok/s",
-  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_short",
-  "expected": "57.14"
- },
- {
-  "view": "cross-host",
-  "header": "Short tok/s",
-  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_short",
-  "expected": "58.32 / 58.27"
- },
- {
-  "view": "cross-host",
-  "header": "Balanced tok/s",
-  "measurement": "dgx-vllm-fn@v030-arma/decode_balanced",
-  "expected": "28.62 / 28.53"
- },
- {
-  "view": "cross-host",
   "header": "Balanced tok/s",
   "measurement": "dgx-vllm-fn@8a72/decode_balanced",
   "expected": "32.58 / 32.58"
- },
- {
-  "view": "cross-host",
-  "header": "Balanced tok/s",
-  "measurement": "dgx-sglang-27b@0928/decode_balanced",
-  "expected": "20.98 / 20.96"
- },
- {
-  "view": "cross-host",
-  "header": "Balanced tok/s",
-  "measurement": "V1-09b/decode_balanced",
-  "expected": "95.23 / 95.22"
- },
- {
-  "view": "cross-host",
-  "header": "Balanced tok/s",
-  "measurement": "dgx-sglang-27b-vl@0928/decode_balanced",
-  "expected": "12.50 / 12.48"
- },
- {
-  "view": "cross-host",
-  "header": "Balanced tok/s",
-  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_balanced",
-  "expected": "55.10"
- },
- {
-  "view": "cross-host",
-  "header": "Balanced tok/s",
-  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_balanced",
-  "expected": "56.15 / 56.09"
- },
- {
-  "view": "cross-host",
-  "header": "4-stream agg",
-  "measurement": "dgx-vllm-fn@v030-arma/decode_4stream",
-  "expected": "108.9 / 111.2"
  },
  {
   "view": "cross-host",
@@ -253,69 +319,9 @@
  },
  {
   "view": "cross-host",
-  "header": "4-stream agg",
-  "measurement": "dgx-sglang-27b@0928/decode_4stream",
-  "expected": "44.3 / 44.6"
- },
- {
-  "view": "cross-host",
-  "header": "4-stream agg",
-  "measurement": "V1-09b/decode_4stream",
-  "expected": "274.3 / 308.6"
- },
- {
-  "view": "cross-host",
-  "header": "4-stream agg",
-  "measurement": "dgx-sglang-27b-vl@0928/decode_4stream",
-  "expected": "23.9 / 23.9"
- },
- {
-  "view": "cross-host",
-  "header": "4-stream agg",
-  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_4stream",
-  "expected": "112.6"
- },
- {
-  "view": "cross-host",
-  "header": "4-stream agg",
-  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_4stream",
-  "expected": "114.8 / 115.0"
- },
- {
-  "view": "cross-host",
-  "header": "Cold prefill tok/s (~3.8k)",
-  "measurement": "dgx-vllm-fn@v030-arma/prefill_cold",
-  "expected": "2,169 / 2,174"
- },
- {
-  "view": "cross-host",
   "header": "Cold prefill tok/s (~3.8k)",
   "measurement": "dgx-vllm-fn@8a72/prefill_cold",
   "expected": "1,745 / 1,773"
- },
- {
-  "view": "cross-host",
-  "header": "Cold prefill tok/s (~3.8k)",
-  "measurement": "dgx-sglang-27b@0928/prefill_cold",
-  "expected": "2,521 / 2,620"
- },
- {
-  "view": "cross-host",
-  "header": "Cold prefill tok/s (~3.8k)",
-  "measurement": "V1-09b/prefill_cold",
-  "expected": "11,492 / 11,539"
- },
- {
-  "view": "cross-host",
-  "header": "Cold prefill tok/s (~3.8k)",
-  "measurement": "dgx-sglang-27b-vl@0928/prefill_cold",
-  "expected": "2,656 / 2,692"
- },
- {
-  "view": "cross-host",
-  "header": "TTFT (~3.8k)",
-  "measurement": "dgx-vllm-fn@v030-arma/ttft_cold",
-  "expected": "1.753 / 1.749"
  },
  {
   "view": "cross-host",
@@ -325,15 +331,117 @@
  },
  {
   "view": "cross-host",
-  "header": "TTFT (~3.8k)",
-  "measurement": "dgx-sglang-27b@0928/ttft_cold",
-  "expected": "1.51 / 1.45"
+  "header": "accept_len",
+  "measurement": "dgx-vllm-fn@8a72/accept_len",
+  "expected": "2.25 / 2.25"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "dgx-vllm-fn@8a72/steps_per_s",
+  "expected": "13.48 / 13.49"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image request decode",
+  "measurement": "dgx-vllm-fn@8a72/image_decode/120f",
+  "expected": "48.4"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image TTFT",
+  "measurement": "dgx-vllm-fn@8a72/image_ttft/120f",
+  "expected": "128.8"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image JSON ok",
+  "measurement": "dgx-vllm-fn@8a72/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "dgx-sglang-fn@0928/decode_short",
+  "expected": "28.21 / 28.32"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "dgx-sglang-fn@0928/decode_balanced",
+  "expected": "25.56 / 27.28"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "dgx-sglang-fn@0928/decode_4stream",
+  "expected": "70.3 / 71.4"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "dgx-sglang-fn@0928/prefill_cold",
+  "expected": "2,263 / 2,455"
  },
  {
   "view": "cross-host",
   "header": "TTFT (~3.8k)",
-  "measurement": "V1-09b/ttft_cold",
-  "expected": "0.331 / 0.330"
+  "measurement": "dgx-sglang-fn@0928/ttft_cold",
+  "expected": "1.68 / 1.55"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "dgx-sglang-fn@0928/accept_len",
+  "expected": "2.19"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len, thinking on",
+  "measurement": "dgx-sglang-fn@0928/accept_len/thinking-on",
+  "expected": "2.26"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "dgx-sglang-fn@0928/steps_per_s",
+  "expected": "12.8"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s, thinking on",
+  "measurement": "dgx-sglang-fn@0928/steps_per_s/thinking-on",
+  "expected": "12.3"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "dgx-vllm-fn@v030-arma/decode_short",
+  "expected": "32.16 / 32.16"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "dgx-vllm-fn@v030-arma/decode_balanced",
+  "expected": "28.62 / 28.53"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "dgx-vllm-fn@v030-arma/decode_4stream",
+  "expected": "108.9 / 111.2"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "dgx-vllm-fn@v030-arma/prefill_cold",
+  "expected": "2,169 / 2,174"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "dgx-vllm-fn@v030-arma/ttft_cold",
+  "expected": "1.753 / 1.749"
  },
  {
   "view": "cross-host",
@@ -343,9 +451,249 @@
  },
  {
   "view": "cross-host",
+  "header": "accept_len, thinking on",
+  "measurement": "dgx-vllm-fn@v030-arma/accept_len/thinking-on",
+  "expected": "2.28"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "dgx-vllm-fn@v030-arma/steps_per_s",
+  "expected": "13.27"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s, thinking on",
+  "measurement": "dgx-vllm-fn@v030-arma/steps_per_s/thinking-on",
+  "expected": "12.76"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image request decode",
+  "measurement": "dgx-vllm-fn@v030-arma/image_decode/120f",
+  "expected": "46.6–47.5"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image TTFT",
+  "measurement": "dgx-vllm-fn@v030-arma/image_ttft/120f",
+  "expected": "82.8 / 82.8"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image JSON ok",
+  "measurement": "dgx-vllm-fn@v030-arma/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/decode_short",
+  "expected": "29.60 / 29.58"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/decode_balanced",
+  "expected": "27.72 / 27.71"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/decode_4stream",
+  "expected": "89.0 / 91.4"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/prefill_cold",
+  "expected": "2,136 / 2,142"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/ttft_cold",
+  "expected": "1.781 / 1.776"
+ },
+ {
+  "view": "cross-host",
   "header": "accept_len",
-  "measurement": "dgx-vllm-fn@8a72/accept_len",
-  "expected": "2.25 / 2.25"
+  "measurement": "dgx-vllm-swift-fn@v030-arma/accept_len",
+  "expected": "2.20"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len, thinking on",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/accept_len/thinking-on",
+  "expected": "2.15"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/steps_per_s",
+  "expected": "12.84"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s, thinking on",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/steps_per_s/thinking-on",
+  "expected": "12.35"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image request decode",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/image_decode/120f",
+  "expected": "46.6–46.7"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image TTFT",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/image_ttft/120f",
+  "expected": "82.7 / 82.8"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image JSON ok",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "dgx-sglang-fn@0928-pinned/decode_short",
+  "expected": "31.39 / 29.00"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "dgx-sglang-fn@0928-pinned/decode_balanced",
+  "expected": "27.55 / 26.92"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "dgx-sglang-fn@0928-pinned/decode_4stream",
+  "expected": "69.5 / 71.5"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "dgx-sglang-fn@0928-pinned/prefill_cold",
+  "expected": "2,410 / 2,415"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "dgx-sglang-fn@0928-pinned/ttft_cold",
+  "expected": "1.578 / 1.574"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "dgx-sglang-fn@0928-pinned/accept_len",
+  "expected": "2.26"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len, thinking on",
+  "measurement": "dgx-sglang-fn@0928-pinned/accept_len/thinking-on",
+  "expected": "2.13"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image request decode",
+  "measurement": "dgx-sglang-fn@0928-pinned/image_decode/100f",
+  "expected": "47.0"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image TTFT",
+  "measurement": "dgx-sglang-fn@0928-pinned/image_ttft/100f",
+  "expected": "119.8 / 116.9 / 126.8"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/decode_short",
+  "expected": "28.01 / 28.42"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/decode_balanced",
+  "expected": "26.66 / 28.19"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/decode_4stream",
+  "expected": "67.0 / 67.5"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/prefill_cold",
+  "expected": "2,394 / 2,433"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/ttft_cold",
+  "expected": "1.588 / 1.563"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/accept_len",
+  "expected": "2.22"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len, thinking on",
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/accept_len/thinking-on",
+  "expected": "2.09"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image request decode",
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/image_decode/100f",
+  "expected": "48.1"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image TTFT",
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/image_ttft/100f",
+  "expected": "112.0 / 107.8 / 103.4"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "dgx-sglang-27b@0928/decode_short",
+  "expected": "22.95 / 22.93"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "dgx-sglang-27b@0928/decode_balanced",
+  "expected": "20.98 / 20.96"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "dgx-sglang-27b@0928/decode_4stream",
+  "expected": "44.3 / 44.6"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "dgx-sglang-27b@0928/prefill_cold",
+  "expected": "2,521 / 2,620"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "dgx-sglang-27b@0928/ttft_cold",
+  "expected": "1.51 / 1.45"
  },
  {
   "view": "cross-host",
@@ -356,26 +704,8 @@
  {
   "view": "cross-host",
   "header": "accept_len, thinking on",
-  "measurement": "dgx-vllm-fn@v030-arma/accept_len/thinking-on",
-  "expected": "2.28"
- },
- {
-  "view": "cross-host",
-  "header": "accept_len, thinking on",
   "measurement": "dgx-sglang-27b@0928/accept_len/thinking-on",
   "expected": "2.80"
- },
- {
-  "view": "cross-host",
-  "header": "steps/s",
-  "measurement": "dgx-vllm-fn@v030-arma/steps_per_s",
-  "expected": "13.27"
- },
- {
-  "view": "cross-host",
-  "header": "steps/s",
-  "measurement": "dgx-vllm-fn@8a72/steps_per_s",
-  "expected": "13.48 / 13.49"
  },
  {
   "view": "cross-host",
@@ -386,67 +716,5233 @@
  {
   "view": "cross-host",
   "header": "steps/s, thinking on",
-  "measurement": "dgx-vllm-fn@v030-arma/steps_per_s/thinking-on",
-  "expected": "12.76"
- },
- {
-  "view": "cross-host",
-  "header": "steps/s, thinking on",
   "measurement": "dgx-sglang-27b@0928/steps_per_s/thinking-on",
   "expected": "8.85"
  },
  {
   "view": "cross-host",
-  "header": "140k-frame decode",
-  "measurement": "dgx-vllm-fn@v030-arma/image_decode/120f",
-  "expected": "46.6–47.5"
+  "header": "Short tok/s",
+  "measurement": "gh200-vllm-fn@69d3/decode_short",
+  "expected": "210.90 / 208.26"
  },
  {
   "view": "cross-host",
-  "header": "140k-frame decode",
-  "measurement": "dgx-vllm-fn@8a72/image_decode/120f",
-  "expected": "48.4"
+  "header": "Balanced tok/s",
+  "measurement": "gh200-vllm-fn@69d3/decode_balanced",
+  "expected": "194.73 / 191.40"
  },
  {
   "view": "cross-host",
-  "header": "140k-frame decode",
+  "header": "4-stream agg",
+  "measurement": "gh200-vllm-fn@69d3/decode_4stream",
+  "expected": "478.1 / 602.3"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "gh200-vllm-fn@69d3/prefill_cold",
+  "expected": "17,115 / 17,041"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "gh200-vllm-fn@69d3/ttft_cold",
+  "expected": "0.222 / 0.223"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "gh200-vllm-fn@69d3/accept_len",
+  "expected": "2.24 / 2.23"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "gh200-vllm-fn@69d3/steps_per_s",
+  "expected": "85.9 / 85.8"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image request decode",
+  "measurement": "gh200-vllm-fn@69d3/image_decode/120f",
+  "expected": "355.0 / 355.4"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image TTFT",
+  "measurement": "gh200-vllm-fn@69d3/image_ttft/120f",
+  "expected": "12.5 / 9.0"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image accept_len",
+  "measurement": "gh200-vllm-fn@69d3/image_accept_len/120f",
+  "expected": "3.99 / 3.98"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image JSON ok",
+  "measurement": "gh200-vllm-fn@69d3/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "gh200-vllm-27b@69d3/decode_short",
+  "expected": "137.62 / 137.64"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "gh200-vllm-27b@69d3/decode_balanced",
+  "expected": "132.22 / 132.21"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "gh200-vllm-27b@69d3/decode_4stream",
+  "expected": "445.3 / 445.6"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "gh200-vllm-27b@69d3/prefill_cold",
+  "expected": "15,415 / 15,365"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "gh200-vllm-27b@69d3/ttft_cold",
+  "expected": "0.247 / 0.248"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "gh200-vllm-27b@69d3/accept_len",
+  "expected": "2.52 / 2.52"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "gh200-vllm-27b@69d3/steps_per_s",
+  "expected": "51.0 / 51.4"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "gh200-vllm-fn@2026-09-27/decode_short",
+  "expected": "214.0–228.5"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "gh200-vllm-fn@2026-09-27/decode_balanced",
+  "expected": "193.2–203.5"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "gh200-vllm-fn@2026-09-27/prefill_cold",
+  "expected": "~17,400"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "gh200-vllm-fn@2026-09-27/ttft_cold",
+  "expected": "0.218"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "gh200-vllm-fn@2026-09-27/accept_len",
+  "expected": "2.34"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len, thinking on",
+  "measurement": "gh200-vllm-fn@2026-09-27/accept_len/thinking-on",
+  "expected": "2.21"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "gh200-vllm-fn@2026-09-27/steps_per_s",
+  "expected": "83.5"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s, thinking on",
+  "measurement": "gh200-vllm-fn@2026-09-27/steps_per_s/thinking-on",
+  "expected": "84.6"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image request decode",
+  "measurement": "gh200-vllm-fn@2026-09-27/image_decode/120f",
+  "expected": "354.9"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image TTFT",
+  "measurement": "gh200-vllm-fn@2026-09-27/image_ttft/120f",
+  "expected": "13.1"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "V1-11/decode_short",
+  "expected": "154.14 / 154.22"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "V1-11/decode_balanced",
+  "expected": "126.15 / 126.16"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "V1-11/decode_4stream",
+  "expected": "485.5 / 482.5"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "V1-11/prefill_cold",
+  "expected": "3,975 / 3,924"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-11/ttft_cold",
+  "expected": "0.957 / 0.969"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "V1-11/accept_len",
+  "expected": "2.73 / 2.73"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "V1-11/steps_per_s",
+  "expected": "51.5 / 51.6"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "V1-12/decode_short",
+  "expected": "107.44 / 107.44"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "V1-12/decode_balanced",
+  "expected": "104.59 / 104.59"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "V1-12/decode_4stream",
+  "expected": "381.6 / 382.1"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "V1-12/prefill_cold",
+  "expected": "10,681 / 10,984"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-12/ttft_cold",
+  "expected": "0.356 / 0.346"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "V1-12/accept_len",
+  "expected": "2.55 / 2.55"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "V1-12/steps_per_s",
+  "expected": "40.9 / 40.9"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image request decode",
+  "measurement": "V1-01/image_decode/120f",
+  "expected": "137.4"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image TTFT",
+  "measurement": "V1-01/image_ttft/120f",
+  "expected": "35.0"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image JSON ok",
+  "measurement": "V1-01/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "V1-09b/decode_short",
+  "expected": "95.24 / 95.23"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "V1-09b/decode_balanced",
+  "expected": "95.23 / 95.22"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "V1-09b/decode_4stream",
+  "expected": "274.3 / 308.6"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "V1-09b/prefill_cold",
+  "expected": "11,492 / 11,539"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-09b/ttft_cold",
+  "expected": "0.331 / 0.330"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image request decode",
   "measurement": "V1-09b/image_decode/120f",
   "expected": "93.6"
  },
  {
   "view": "cross-host",
-  "header": "140k-frame TTFT",
-  "measurement": "dgx-vllm-fn@v030-arma/image_ttft/120f",
-  "expected": "82.8 / 82.8"
- },
- {
-  "view": "cross-host",
-  "header": "140k-frame TTFT",
-  "measurement": "dgx-vllm-fn@8a72/image_ttft/120f",
-  "expected": "128.8"
- },
- {
-  "view": "cross-host",
-  "header": "140k-frame TTFT",
+  "header": "Image TTFT",
   "measurement": "V1-09b/image_ttft/120f",
   "expected": "25.1"
  },
  {
   "view": "cross-host",
-  "header": "140k-frame JSON ok",
+  "header": "Image JSON ok",
+  "measurement": "V1-09b/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "V1-06/decode_short",
+  "expected": "109.19 / 109.27"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "V1-06/decode_balanced",
+  "expected": "100.86 / 99.92"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "V1-06/decode_4stream",
+  "expected": "177.2 / 178.5"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "V1-06/prefill_cold",
+  "expected": "1,154 / 1,170"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-06/ttft_cold",
+  "expected": "3.30 / 3.25"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "V1-06/accept_len",
+  "expected": "2.29 / 2.29"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "V1-06/steps_per_s",
+  "expected": "42.0 / 42.1"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "V2-07w/decode_short",
+  "expected": "123.89 / 123.03"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "V2-07w/decode_balanced",
+  "expected": "95.80 / 95.25"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "V2-07w/decode_4stream",
+  "expected": "367.2 / 364.9"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "V2-07w/prefill_cold",
+  "expected": "2,655 / 2,614"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-07w/ttft_cold",
+  "expected": "1.432 / 1.455"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "V2-07w/accept_len",
+  "expected": "2.69 / 2.69"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "V2-07w/steps_per_s",
+  "expected": "40.4 / 40.3"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image request decode",
+  "measurement": "V2-07w/image_decode/100f",
+  "expected": "54.4"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image TTFT",
+  "measurement": "V2-07w/image_ttft/100f",
+  "expected": "75.8"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image JSON ok",
+  "measurement": "V2-07w/image_json_ok/100f",
+  "expected": "100"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "V2-03w/decode_short",
+  "expected": "104.63 / 103.88"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "V2-03w/decode_balanced",
+  "expected": "89.46 / 89.05"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "V2-03w/decode_4stream",
+  "expected": "358.4 / 357.0"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "V2-03w/prefill_cold",
+  "expected": "2,673 / 2,638"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-03w/ttft_cold",
+  "expected": "1.423 / 1.442"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "V2-03w/accept_len",
+  "expected": "2.50 / 2.50"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "V2-03w/steps_per_s",
+  "expected": "38.2 / 38.1"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image request decode",
+  "measurement": "V2-03w/image_decode/120f",
+  "expected": "29.4"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image TTFT",
+  "measurement": "V2-03w/image_ttft/120f",
+  "expected": "98.1"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image JSON ok",
+  "measurement": "V2-03w/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "V2-02b/decode_short",
+  "expected": "80.74 / 80.37"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "V2-02b/decode_balanced",
+  "expected": "73.37 / 73.08"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "V2-02b/decode_4stream",
+  "expected": "295.4 / 294.6"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "V2-02b/prefill_cold",
+  "expected": "2,436 / 2,410"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-02b/ttft_cold",
+  "expected": "1.561 / 1.578"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "V2-02b/accept_len",
+  "expected": "2.48 / 2.48"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "V2-02b/steps_per_s",
+  "expected": "30.6 / 30.5"
+ },
+ {
+  "view": "cross-host",
+  "header": "Short tok/s",
+  "measurement": "V2-06i/decode_short",
+  "expected": "52.12 / 51.68"
+ },
+ {
+  "view": "cross-host",
+  "header": "Balanced tok/s",
+  "measurement": "V2-06i/decode_balanced",
+  "expected": "49.54 / 48.95"
+ },
+ {
+  "view": "cross-host",
+  "header": "4-stream agg",
+  "measurement": "V2-06i/decode_4stream",
+  "expected": "70.0 / 69.7"
+ },
+ {
+  "view": "cross-host",
+  "header": "Cold prefill tok/s (~3.8k)",
+  "measurement": "V2-06i/prefill_cold",
+  "expected": "508 / 504"
+ },
+ {
+  "view": "cross-host",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-06i/ttft_cold",
+  "expected": "7.49 / 7.55"
+ },
+ {
+  "view": "cross-host",
+  "header": "accept_len",
+  "measurement": "V2-06i/accept_len",
+  "expected": "2.33 / 2.32"
+ },
+ {
+  "view": "cross-host",
+  "header": "steps/s",
+  "measurement": "V2-06i/steps_per_s",
+  "expected": "21.0 / 21.0"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image request decode",
+  "measurement": "V2-06i/image_decode/50f",
+  "expected": "52.2"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image TTFT",
+  "measurement": "V2-06i/image_ttft/50f",
+  "expected": "154.0"
+ },
+ {
+  "view": "cross-host",
+  "header": "Image JSON ok",
+  "measurement": "V2-06i/image_json_ok/50f",
+  "expected": "50"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-vllm-fn@v030-arma/decode_short",
+  "expected": "32.2"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-vllm-fn@v030-arma/decode_balanced",
+  "expected": "28.6"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-vllm-fn@8a72/decode_short",
+  "expected": "30.1"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-vllm-fn@8a72/decode_balanced",
+  "expected": "32.6"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-fn@0928/decode_short",
+  "expected": "28.3"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-fn@0928/decode_balanced",
+  "expected": "26.4"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/decode_short",
+  "expected": "28.2"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/decode_balanced",
+  "expected": "27.4"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/decode_short",
+  "expected": "29.6"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-vllm-swift-fn@v030-arma/decode_balanced",
+  "expected": "27.7"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-27b@0928/decode_short",
+  "expected": "22.9"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-27b@0928/decode_balanced",
+  "expected": "21.0"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-27b-vl@0928/decode_short",
+  "expected": "12.5"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-27b-vl@0928/decode_balanced",
+  "expected": "12.5"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-27b-vl@0928/image_decode/qc-vision",
+  "expected": "12.6"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_short",
+  "expected": "57.1"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_balanced",
+  "expected": "55.1"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_short",
+  "expected": "58.3"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_balanced",
+  "expected": "56.1"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-gemma4-26b@0.5.20/decode_short",
+  "expected": "30.65"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-gemma4-26b@0.5.20/decode_balanced",
+  "expected": "30.3"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-llamacpp-muse@b11223/decode_short",
+  "expected": "17.7"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-llamacpp-muse@b11223/decode_balanced",
+  "expected": "26.5"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-qwen36-27b@unrecorded/decode_single",
+  "expected": "16.38"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-llamacpp-27b-gguf@2026-08-15/decode_prose",
+  "expected": "14.8"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-llamacpp-27b-gguf@2026-08-15/decode_structured",
+  "expected": "23.2"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-gemma4-31b@unrecorded/decode_single",
+  "expected": "~14"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-27b-fp8@unrecorded/decode_single",
+  "expected": "8.0"
+ },
+ {
+  "view": "decode-scoreboard",
+  "header": "Decode tok/s",
+  "measurement": "dgx-sglang-27b-bf16@unrecorded/decode_single",
+  "expected": "4.4"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-03/decode_short",
+  "expected": "55.94 / 55.95"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-03/decode_balanced",
+  "expected": "55.90 / 55.90"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-03/decode_4stream",
+  "expected": "208.2 / 208.2"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-03/prefill_cold",
+  "expected": "11,181 / 11,225"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-03/ttft_cold",
+  "expected": "0.340 / 0.339"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-01/decode_short",
+  "expected": "102.49 / 102.50"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-01/decode_balanced",
+  "expected": "96.25 / 96.25"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-01/decode_4stream",
+  "expected": "375.1 / 375.8"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-01/prefill_cold",
+  "expected": "11,041 / 11,013"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-01/ttft_cold",
+  "expected": "0.344 / 0.345"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V1-01/accept_len",
+  "expected": "2.43 / 2.43"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V1-01/steps_per_s",
+  "expected": "40.6 / 40.6"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-08/decode_short",
+  "expected": "105.40 / 105.38"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-08/decode_balanced",
+  "expected": "98.78 / 98.78"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-08/decode_4stream",
+  "expected": "371.0 / 371.3"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-08/prefill_cold",
+  "expected": "10,527 / 10,460"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-08/ttft_cold",
+  "expected": "0.361 / 0.364"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V1-08/accept_len",
+  "expected": "2.49 / 2.49"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V1-08/steps_per_s",
+  "expected": "40.5 / 40.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-12/decode_short",
+  "expected": "107.44 / 107.44"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-12/decode_balanced",
+  "expected": "104.59 / 104.59"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-12/decode_4stream",
+  "expected": "381.6 / 382.1"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-12/prefill_cold",
+  "expected": "10,681 / 10,984"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-12/ttft_cold",
+  "expected": "0.356 / 0.346"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V1-12/accept_len",
+  "expected": "2.55 / 2.55"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V1-12/steps_per_s",
+  "expected": "40.9 / 40.9"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-04/decode_short",
+  "expected": "115.34 / 115.30"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-04/decode_balanced",
+  "expected": "109.80 / 109.72"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-04/decode_4stream",
+  "expected": "417.6 / 417.2"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-04/prefill_cold",
+  "expected": "10,331 / 10,655"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-04/ttft_cold",
+  "expected": "0.368 / 0.357"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V1-04/accept_len",
+  "expected": "2.7 / 2.7"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V1-04/steps_per_s",
+  "expected": "41.3 / 41.4"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-04b/decode_short",
+  "expected": "114.49 / 114.45"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-04b/decode_balanced",
+  "expected": "93.16 / 93.16"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-04b/decode_4stream",
+  "expected": "397.0 / 397.2"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-04b/prefill_cold",
+  "expected": "10,466 / 10,531"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-04b/ttft_cold",
+  "expected": "0.363 / 0.361"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V1-04b/accept_len",
+  "expected": "2.56 / 2.56"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V1-04b/steps_per_s",
+  "expected": "40.9 / 40.9"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-13/decode_short",
+  "expected": "76.56 / 76.58"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-13/decode_balanced",
+  "expected": "76.42 / 76.36"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-13/decode_4stream",
+  "expected": "280.1 / 279.6"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-13/prefill_cold",
+  "expected": "3,952 / 3,922"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-13/ttft_cold",
+  "expected": "0.962 / 0.970"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-10/decode_short",
+  "expected": "135.29 / 135.38"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-10/decode_balanced",
+  "expected": "115.00 / 114.97"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-10/decode_4stream",
+  "expected": "464.3 / 463.2"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-10/prefill_cold",
+  "expected": "4,000 / 3,935"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-10/ttft_cold",
+  "expected": "0.951 / 0.966"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V1-10/accept_len",
+  "expected": "2.53 / 2.53"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V1-10/steps_per_s",
+  "expected": "49.1 / 49.1"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-11/decode_short",
+  "expected": "154.14 / 154.22"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-11/decode_balanced",
+  "expected": "126.15 / 126.16"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-11/decode_4stream",
+  "expected": "485.5 / 482.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-11/prefill_cold",
+  "expected": "3,975 / 3,924"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-11/ttft_cold",
+  "expected": "0.957 / 0.969"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V1-11/accept_len",
+  "expected": "2.73 / 2.73"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V1-11/steps_per_s",
+  "expected": "51.5 / 51.6"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-11b/decode_short",
+  "expected": "150.14 / 150.14"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-11b/decode_balanced",
+  "expected": "123.46 / 123.40"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-11b/decode_4stream",
+  "expected": "485.7 / 483.2"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-11b/prefill_cold",
+  "expected": "3,946 / 3,895"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-11b/ttft_cold",
+  "expected": "0.964 / 0.976"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V1-11b/accept_len",
+  "expected": "2.58 / 2.58"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V1-11b/steps_per_s",
+  "expected": "52.7 / 52.7"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-11c/decode_short",
+  "expected": "144.53 / 144.62"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-11c/decode_balanced",
+  "expected": "119.10 / 119.01"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-11c/decode_4stream",
+  "expected": "495.2 / 493.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-11c/prefill_cold",
+  "expected": "3,930 / 3,896"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-11c/ttft_cold",
+  "expected": "0.968 / 0.976"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V1-11c/accept_len",
+  "expected": "2.43 / 2.43"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V1-11c/steps_per_s",
+  "expected": "54.0 / 54.0"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-07c/decode_short",
+  "expected": "49.37 / 48.91"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-07c/decode_balanced",
+  "expected": "49.08 / 48.86"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-07c/decode_4stream",
+  "expected": "141.3 / 141.3"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-07c/prefill_cold",
+  "expected": "2,056 / 2,052"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-07c/ttft_cold",
+  "expected": "1.850 / 1.854"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-07b/decode_short",
+  "expected": "89.04 / 88.27"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-07b/decode_balanced",
+  "expected": "86.17 / 85.86"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-07b/decode_4stream",
+  "expected": "197.5 / 192.8"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-07b/prefill_cold",
+  "expected": "1,894 / 1,894"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-07b/ttft_cold",
+  "expected": "2.007 / 2.008"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V1-07b/accept_len",
+  "expected": "2.54 / 2.54"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V1-07b/steps_per_s",
+  "expected": "31.8 / 32.1"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-07/decode_short",
+  "expected": "66.87 / 66.36"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-07/decode_balanced",
+  "expected": "66.54 / 65.86"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-07/decode_4stream",
+  "expected": "146.6 / 168.1"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-07/prefill_cold",
+  "expected": "1,782 / 1,776"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-07/ttft_cold",
+  "expected": "2.134 / 2.142"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V1-07/accept_len",
+  "expected": "2.66 / 2.66"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V1-07/steps_per_s",
+  "expected": "23.4 / 24.0"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-02/decode_short",
+  "expected": "94.80 / 95.11"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-02/decode_balanced",
+  "expected": "94.80 / 95.09"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-02/decode_4stream",
+  "expected": "244.0 / 307.3"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-02/prefill_cold",
+  "expected": "11,546 / 11,541"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-02/ttft_cold",
+  "expected": "0.329 / 0.330"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-09b/decode_short",
+  "expected": "95.24 / 95.23"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-09b/decode_balanced",
+  "expected": "95.23 / 95.22"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-09b/decode_4stream",
+  "expected": "274.3 / 308.6"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-09b/prefill_cold",
+  "expected": "11,492 / 11,539"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-09b/ttft_cold",
+  "expected": "0.331 / 0.330"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-05/decode_short",
+  "expected": "78.24 / 78.35"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-05/decode_balanced",
+  "expected": "77.55 / 77.91"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-05/decode_4stream",
+  "expected": "175.2 / 177.4"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-05/prefill_cold",
+  "expected": "1,243 / 1,236"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-05/ttft_cold",
+  "expected": "3.059 / 3.076"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V1-06/decode_short",
+  "expected": "109.19 / 109.27"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V1-06/decode_balanced",
+  "expected": "100.86 / 99.92"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V1-06/decode_4stream",
+  "expected": "177.2 / 178.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V1-06/prefill_cold",
+  "expected": "1,154 / 1,170"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V1-06/ttft_cold",
+  "expected": "3.296 / 3.249"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V1-06/accept_len",
+  "expected": "2.29 / 2.29"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V1-06/steps_per_s",
+  "expected": "42.0 / 42.1"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-01/decode_short",
+  "expected": "41.88 / 41.70"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-01/decode_balanced",
+  "expected": "41.75 / 41.66"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-01/decode_4stream",
+  "expected": "155.6 / 155.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-01/prefill_cold",
+  "expected": "2,443 / 2,429"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-01/ttft_cold",
+  "expected": "1.557 / 1.566"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-01r/decode_short",
+  "expected": "41.87 / 41.68"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-01r/decode_balanced",
+  "expected": "41.71 / 41.65"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-01r/decode_4stream",
+  "expected": "155.7 / 155.6"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-01r/prefill_cold",
+  "expected": "2,438 / 2,431"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-01r/ttft_cold",
+  "expected": "1.560 / 1.564"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-02/decode_short",
+  "expected": "73.71 / 73.44"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-02/decode_balanced",
+  "expected": "70.65 / 70.42"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-02/decode_4stream",
+  "expected": "252.9 / 252.6"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-02/prefill_cold",
+  "expected": "2,335 / 2,310"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-02/ttft_cold",
+  "expected": "1.629 / 1.646"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-02/accept_len",
+  "expected": "2.5 / 2.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-02/steps_per_s",
+  "expected": "28.1 / 28.1"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-02c/decode_short",
+  "expected": "75.54 / 75.23"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-02c/decode_balanced",
+  "expected": "67.95 / 67.77"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-02c/decode_4stream",
+  "expected": "266.3 / 265.8"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-02c/prefill_cold",
+  "expected": "2,338 / 2,314"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-02c/ttft_cold",
+  "expected": "1.627 / 1.644"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-02c/accept_len",
+  "expected": "2.51 / 2.51"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-02c/steps_per_s",
+  "expected": "28.1 / 28.1"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-02d/decode_short",
+  "expected": "76.81 / 76.53"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-02d/decode_balanced",
+  "expected": "65.99 / 65.80"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-02d/decode_4stream",
+  "expected": "275.9 / 275.3"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-02d/prefill_cold",
+  "expected": "2,345 / 2,324"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-02d/ttft_cold",
+  "expected": "1.622 / 1.636"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-02d/accept_len",
+  "expected": "2.48 / 2.48"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-02d/steps_per_s",
+  "expected": "28.5 / 28.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-02b/decode_short",
+  "expected": "80.74 / 80.37"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-02b/decode_balanced",
+  "expected": "73.37 / 73.08"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-02b/decode_4stream",
+  "expected": "295.4 / 294.6"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-02b/prefill_cold",
+  "expected": "2,436 / 2,410"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-02b/ttft_cold",
+  "expected": "1.561 / 1.578"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-02b/accept_len",
+  "expected": "2.48 / 2.48"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-02b/steps_per_s",
+  "expected": "30.6 / 30.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-03b/decode_short",
+  "expected": "60.08 / 59.66"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-03b/decode_balanced",
+  "expected": "59.87 / 59.55"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-03b/decode_4stream",
+  "expected": "217.5 / 216.8"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-03b/prefill_cold",
+  "expected": "2,695 / 2,670"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-03b/ttft_cold",
+  "expected": "1.411 / 1.424"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-03p/decode_short",
+  "expected": "60.05 / 59.56"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-03p/decode_balanced",
+  "expected": "59.74 / 59.47"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-03p/decode_4stream",
+  "expected": "217.2 / 216.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-03p/prefill_cold",
+  "expected": "2,706 / 2,682"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-03p/ttft_cold",
+  "expected": "1.406 / 1.418"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-03/decode_short",
+  "expected": "103.63 / 102.87"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-03/decode_balanced",
+  "expected": "89.52 / 89.07"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-03/decode_4stream",
+  "expected": "360.5 / 359.0"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-03/prefill_cold",
+  "expected": "2,674 / 2,640"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-03/ttft_cold",
+  "expected": "1.422 / 1.440"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-03/accept_len",
+  "expected": "2.49 / 2.49"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-03/steps_per_s",
+  "expected": "38.2 / 38.1"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-03r/decode_short",
+  "expected": "103.24 / 102.58"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-03r/decode_balanced",
+  "expected": "89.24 / 88.84"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-03r/decode_4stream",
+  "expected": "359.7 / 358.2"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-03r/prefill_cold",
+  "expected": "2,669 / 2,635"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-03r/ttft_cold",
+  "expected": "1.425 / 1.443"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-03r/accept_len",
+  "expected": "2.49 / 2.49"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-03r/steps_per_s",
+  "expected": "38.1 / 38.0"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-04/decode_short",
+  "expected": "104.62 / 103.99"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-04/decode_balanced",
+  "expected": "92.21 / 91.72"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-04/decode_4stream",
+  "expected": "347.9 / 346.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-04/prefill_cold",
+  "expected": "2,646 / 2,610"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-04/ttft_cold",
+  "expected": "1.437 / 1.457"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-04/accept_len",
+  "expected": "2.53 / 2.53"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-04/steps_per_s",
+  "expected": "38.0 / 37.9"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-07g/decode_short",
+  "expected": "110.64 / 109.93"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-07g/decode_balanced",
+  "expected": "105.07 / 104.43"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-07g/decode_4stream",
+  "expected": "372.2 / 370.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-07g/prefill_cold",
+  "expected": "2,681 / 2,641"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-07g/ttft_cold",
+  "expected": "1.418 / 1.440"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-07g/accept_len",
+  "expected": "2.52 / 2.52"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-07g/steps_per_s",
+  "expected": "41.5 / 41.4"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-07f/decode_short",
+  "expected": "123.94 / 123.12"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-07f/decode_balanced",
+  "expected": "95.94 / 95.34"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-07f/decode_4stream",
+  "expected": "367.7 / 365.0"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-07f/prefill_cold",
+  "expected": "2,654 / 2,617"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-07f/ttft_cold",
+  "expected": "1.433 / 1.453"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-07f/accept_len",
+  "expected": "2.69 / 2.69"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-07f/steps_per_s",
+  "expected": "40.5 / 40.4"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-07d/decode_short",
+  "expected": "120.71 / 119.90"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-07d/decode_balanced",
+  "expected": "99.36 / 98.71"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-07d/decode_4stream",
+  "expected": "359.1 / 356.3"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-07d/prefill_cold",
+  "expected": "2,648 / 2,607"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-07d/ttft_cold",
+  "expected": "1.436 / 1.459"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-07d/accept_len",
+  "expected": "2.74 / 2.74"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-07d/steps_per_s",
+  "expected": "39.7 / 39.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-07e/decode_short",
+  "expected": "122.65 / 121.90"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-07e/decode_balanced",
+  "expected": "109.68 / 108.99"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-07e/decode_4stream",
+  "expected": "362.6 / 360.2"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-07e/prefill_cold",
+  "expected": "2,646 / 2,614"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-07e/ttft_cold",
+  "expected": "1.437 / 1.455"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-07e/accept_len",
+  "expected": "2.88 / 2.88"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-07e/steps_per_s",
+  "expected": "39.3 / 39.2"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-08/decode_short",
+  "expected": "34.75 / 34.61"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-08/decode_balanced",
+  "expected": "34.58 / 34.58"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-08/decode_4stream",
+  "expected": "98.4 / 98.7"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-08/prefill_cold",
+  "expected": "1,188 / 1,189"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-08/ttft_cold",
+  "expected": "3.201 / 3.198"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-09b/decode_short",
+  "expected": "35.18 / 35.05"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-09b/decode_balanced",
+  "expected": "35.04 / 35.00"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-09b/decode_4stream",
+  "expected": "98.6 / 98.4"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-09b/prefill_cold",
+  "expected": "1,168 / 1,167"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-09b/ttft_cold",
+  "expected": "3.256 / 3.259"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-08b/decode_short",
+  "expected": "60.54 / 60.14"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-08b/decode_balanced",
+  "expected": "58.12 / 58.11"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-08b/decode_4stream",
+  "expected": "149.0 / 146.7"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-08b/prefill_cold",
+  "expected": "1,130 / 1,126"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-08b/ttft_cold",
+  "expected": "3.366 / 3.376"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-08b/accept_len",
+  "expected": "2.48 / 2.49"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-08b/steps_per_s",
+  "expected": "22.5 / 22.9"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-09/decode_short",
+  "expected": "52.64 / 52.07"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-09/decode_balanced",
+  "expected": "46.16 / 45.89"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-09/decode_4stream",
+  "expected": "121.0 / 121.6"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-09/prefill_cold",
+  "expected": "1,069 / 1,067"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-09/ttft_cold",
+  "expected": "3.558 / 3.565"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-09/accept_len",
+  "expected": "2.83 / 2.83"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-09/steps_per_s",
+  "expected": "16.6 / 16.9"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-05/decode_short",
+  "expected": "34.85 / 33.43"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-05/decode_balanced",
+  "expected": "32.78 / 29.07"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-05/decode_4stream",
+  "expected": "73.6 / 76.4"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-05/prefill_cold",
+  "expected": "145 / 147"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-05/ttft_cold",
+  "expected": "26.224 / 25.858"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-05b/decode_short",
+  "expected": "33.22 / 36.25"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-05b/decode_balanced",
+  "expected": "35.08 / 39.04"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-05b/decode_4stream",
+  "expected": "84.4 / 78.7"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-05b/prefill_cold",
+  "expected": "218 / 214"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-05b/ttft_cold",
+  "expected": "17.457 / 17.748"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-05c/decode_short",
+  "expected": "37.95 / 37.18"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-05c/decode_balanced",
+  "expected": "37.42 / 38.69"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-05c/decode_4stream",
+  "expected": "85.1 / 81.5"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-05c/prefill_cold",
+  "expected": "484 / 487"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-05c/ttft_cold",
+  "expected": "7.851 / 7.816"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-06/decode_short",
+  "expected": "48.89 / 52.14"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-06/decode_balanced",
+  "expected": "46.78 / 45.69"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-06/decode_4stream",
+  "expected": "80.6 / 83.7"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-06/prefill_cold",
+  "expected": "142 / 169"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-06/ttft_cold",
+  "expected": "26.787 / 22.514"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-06/accept_len",
+  "expected": "2.27 / 2.27"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-06/steps_per_s",
+  "expected": "17.0 / 15.4"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-06b/decode_short",
+  "expected": "55.22 / 55.29"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-06b/decode_balanced",
+  "expected": "50.89 / 51.85"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-06b/decode_4stream",
+  "expected": "85.0 / 85.6"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-06b/prefill_cold",
+  "expected": "196 / 198"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-06b/ttft_cold",
+  "expected": "19.385 / 19.224"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-06b/accept_len",
+  "expected": "2.26 / 2.26"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-06b/steps_per_s",
+  "expected": "18.7 / 18.1"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Short",
+  "measurement": "V2-06c/decode_short",
+  "expected": "53.01 / 54.61"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Balanced",
+  "measurement": "V2-06c/decode_balanced",
+  "expected": "50.72 / 51.06"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "4-stream",
+  "measurement": "V2-06c/decode_4stream",
+  "expected": "86.3 / 84.3"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "Prefill (~3.8k)",
+  "measurement": "V2-06c/prefill_cold",
+  "expected": "448 / 448"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "TTFT (~3.8k)",
+  "measurement": "V2-06c/ttft_cold",
+  "expected": "8.486 / 8.493"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "accept_len",
+  "measurement": "V2-06c/accept_len",
+  "expected": "2.27 / 2.26"
+ },
+ {
+  "view": "violet-matrix",
+  "header": "steps/s",
+  "measurement": "V2-06c/steps_per_s",
+  "expected": "17.6 / 18.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/decode_short",
+  "expected": "32.16 / 32.16"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/decode_balanced",
+  "expected": "28.62 / 28.53"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/decode_4stream",
+  "expected": "108.9 / 111.2"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/prefill_cold",
+  "expected": "2,169 / 2,174"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/ttft_cold",
+  "expected": "1.753 / 1.749"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/accept_len",
+  "expected": "2.28"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/steps_per_s",
+  "expected": "13.27"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/accept_len/thinking-on",
+  "expected": "2.28"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/steps_per_s/thinking-on",
+  "expected": "12.76"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/image_decode/120f",
+  "expected": "46.6–47.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/image_ttft/120f",
+  "expected": "82.8 / 82.8"
+ },
+ {
+  "view": null,
+  "header": null,
   "measurement": "dgx-vllm-fn@v030-arma/image_json_ok/120f",
   "expected": "120"
  },
  {
-  "view": "cross-host",
-  "header": "140k-frame JSON ok",
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/kv_pool_tokens",
+  "expected": "569,302 / 540,175 / 603,725"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/graded_set/xhigh",
+  "expected": "22"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@v030-arma/graded_set/low",
+  "expected": "21"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/decode_short",
+  "expected": "30.12 / 30.15"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/decode_balanced",
+  "expected": "32.58 / 32.58"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/decode_4stream",
+  "expected": "88.5 / 94.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/prefill_cold",
+  "expected": "1,745 / 1,773"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/ttft_cold",
+  "expected": "2.18 / 2.15"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/accept_len",
+  "expected": "2.25 / 2.25"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/steps_per_s",
+  "expected": "13.48 / 13.49"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/image_decode/120f",
+  "expected": "48.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/image_ttft/120f",
+  "expected": "128.8"
+ },
+ {
+  "view": null,
+  "header": null,
   "measurement": "dgx-vllm-fn@8a72/image_json_ok/120f",
   "expected": "120"
  },
  {
-  "view": "cross-host",
-  "header": "140k-frame JSON ok",
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@0928/decode_short",
+  "expected": "22.95 / 22.93"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@0928/decode_balanced",
+  "expected": "20.98 / 20.96"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@0928/decode_4stream",
+  "expected": "44.3 / 44.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@0928/prefill_cold",
+  "expected": "2,520.5 / 2,619.7"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@0928/ttft_cold",
+  "expected": "1.51 / 1.45"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@0928/accept_len",
+  "expected": "2.52"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@0928/steps_per_s",
+  "expected": "8.86"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@0928/accept_len/thinking-on",
+  "expected": "2.80"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@0928/steps_per_s/thinking-on",
+  "expected": "8.85"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-09b/decode_short",
+  "expected": "95.24 / 95.23"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-09b/decode_balanced",
+  "expected": "95.23 / 95.22"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-09b/decode_4stream",
+  "expected": "274.3 / 308.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-09b/prefill_cold",
+  "expected": "11,492 / 11,539"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-09b/ttft_cold",
+  "expected": "0.331 / 0.330"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-09b/image_decode/120f",
+  "expected": "93.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-09b/image_ttft/120f",
+  "expected": "25.1"
+ },
+ {
+  "view": null,
+  "header": null,
   "measurement": "V1-09b/image_json_ok/120f",
   "expected": "120"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b-vl@0928/decode_short",
+  "expected": "12.51 / 12.50"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b-vl@0928/decode_balanced",
+  "expected": "12.50 / 12.48"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b-vl@0928/decode_4stream",
+  "expected": "23.9 / 23.9"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b-vl@0928/prefill_cold",
+  "expected": "2,655.5 / 2,691.7"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b-vl@0928/image_decode/qc-vision",
+  "expected": "12.60"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_short",
+  "expected": "57.14"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_balanced",
+  "expected": "55.10"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20-cap/decode_4stream",
+  "expected": "112.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_short",
+  "expected": "58.32 / 58.27"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_balanced",
+  "expected": "56.15 / 56.09"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-qwen36-35b@0.5.20/decode_4stream",
+  "expected": "114.8 / 115.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-llamacpp-27b-gguf@2026-08-15/decode_prose",
+  "expected": "14.77"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-llamacpp-27b-gguf@2026-08-15/decode_structured",
+  "expected": "23.17"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b-bf16@unrecorded/decode_single",
+  "expected": "4.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/accept_len/text-control",
+  "expected": "2.0237 / 2.0237"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/decode_single/text-control",
+  "expected": "27.45 / 27.548"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/image_accept_len/1img",
+  "expected": "2.3122 / 2.3122"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/image_decode/1img",
+  "expected": "31.28 / 31.134"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/image_accept_len/4img",
+  "expected": "2.386 / 2.386"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/image_decode/4img",
+  "expected": "31.045 / 32.142"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/image_accept_len/120f-2026-09-28",
+  "expected": "3.744"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/image_decode/120f-2026-09-28",
+  "expected": "48.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/image_ttft/120f-2026-09-28",
+  "expected": "96.3"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/graded_set/xhigh-2026-09-28",
+  "expected": "22"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/decode_short/2026-09-30",
+  "expected": "30.64 / 30.68"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/decode_balanced/2026-09-30",
+  "expected": "27.90 / 27.90"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/decode_4stream/2026-09-30",
+  "expected": "100.0 / 106.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/prefill_cold/2026-09-30",
+  "expected": "1,766 / 1,768"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/accept_len/2026-09-30",
+  "expected": "2.19"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/accept_len/thinking-on-2026-09-30",
+  "expected": "2.25"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/image_ttft/120f-2026-09-30",
+  "expected": "96.9 / 97.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/image_ttft/120f-cold-2026-09-30",
+  "expected": "97.9"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-fn@8a72/kv_pool_tokens/2026-09-30",
+  "expected": "518,992"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928/decode_short",
+  "expected": "28.21 / 28.32"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928/decode_balanced",
+  "expected": "25.56 / 27.28"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928/decode_4stream",
+  "expected": "70.3 / 71.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928/prefill_cold",
+  "expected": "2,263 / 2,455"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928/ttft_cold",
+  "expected": "1.68 / 1.55"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928/accept_len",
+  "expected": "2.19"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928/accept_len/thinking-on",
+  "expected": "2.26"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928/steps_per_s",
+  "expected": "12.8"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928/steps_per_s/thinking-on",
+  "expected": "12.3"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/decode_short",
+  "expected": "29.60 / 29.58"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/decode_balanced",
+  "expected": "27.72 / 27.71"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/decode_4stream",
+  "expected": "89.0 / 91.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/prefill_cold",
+  "expected": "2,136 / 2,142"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/ttft_cold",
+  "expected": "1.781 / 1.776"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/accept_len",
+  "expected": "2.20"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/accept_len/thinking-on",
+  "expected": "2.15"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/steps_per_s",
+  "expected": "12.84"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/steps_per_s/thinking-on",
+  "expected": "12.35"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/image_decode/120f",
+  "expected": "46.6–46.7"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/image_ttft/120f",
+  "expected": "82.7 / 82.8"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-vllm-swift-fn@v030-arma/kv_pool_tokens",
+  "expected": "386,596"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928-pinned/decode_short",
+  "expected": "31.39 / 29.00"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928-pinned/decode_balanced",
+  "expected": "27.55 / 26.92"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928-pinned/decode_4stream",
+  "expected": "69.5 / 71.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928-pinned/prefill_cold",
+  "expected": "2,410 / 2,415"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928-pinned/ttft_cold",
+  "expected": "1.578 / 1.574"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928-pinned/accept_len",
+  "expected": "2.26"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928-pinned/accept_len/thinking-on",
+  "expected": "2.13"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928-pinned/image_decode/100f",
+  "expected": "47.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@0928-pinned/image_ttft/100f",
+  "expected": "119.8 / 116.9 / 126.8"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/decode_short",
+  "expected": "28.01 / 28.42"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/decode_balanced",
+  "expected": "26.66 / 28.19"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/decode_4stream",
+  "expected": "67.0 / 67.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/prefill_cold",
+  "expected": "2,394 / 2,433"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/ttft_cold",
+  "expected": "1.588 / 1.563"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/accept_len",
+  "expected": "2.22"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/accept_len/thinking-on",
+  "expected": "2.09"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/image_decode/100f",
+  "expected": "48.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-swift-fn@0928-pinned/image_ttft/100f",
+  "expected": "112.0 / 107.8 / 103.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3/decode_short",
+  "expected": "210.90 / 208.26"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3/decode_balanced",
+  "expected": "194.73 / 191.40"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3/decode_4stream",
+  "expected": "478.1 / 602.3"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3/accept_len",
+  "expected": "2.24 / 2.23"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3/steps_per_s",
+  "expected": "85.9 / 85.8"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3/prefill_cold",
+  "expected": "17,115 / 17,041"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3/ttft_cold",
+  "expected": "0.222 / 0.223"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3/image_decode/120f",
+  "expected": "355.0 / 355.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3/image_ttft/120f",
+  "expected": "12.5 / 9.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3/image_accept_len/120f",
+  "expected": "3.99 / 3.98"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-27b@69d3/decode_short",
+  "expected": "137.62 / 137.64"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-27b@69d3/decode_balanced",
+  "expected": "132.22 / 132.21"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-27b@69d3/decode_4stream",
+  "expected": "445.3 / 445.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-27b@69d3/accept_len",
+  "expected": "2.52 / 2.52"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-27b@69d3/steps_per_s",
+  "expected": "51.0 / 51.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-27b@69d3/prefill_cold",
+  "expected": "15,415 / 15,365"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-27b@69d3/ttft_cold",
+  "expected": "0.247 / 0.248"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@2026-09-27/decode_short",
+  "expected": "214.0–228.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@2026-09-27/decode_balanced",
+  "expected": "193.2–203.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@2026-09-27/prefill_cold",
+  "expected": "~17,400"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@2026-09-27/ttft_cold",
+  "expected": "0.218"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@2026-09-27/accept_len",
+  "expected": "2.34"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@2026-09-27/steps_per_s",
+  "expected": "83.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@2026-09-27/accept_len/thinking-on",
+  "expected": "2.21"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@2026-09-27/steps_per_s/thinking-on",
+  "expected": "84.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@2026-09-27/image_decode/120f",
+  "expected": "354.9"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@2026-09-27/image_ttft/120f",
+  "expected": "13.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3-compdefault/decode_short",
+  "expected": "218.77 / 217.97"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3-compdefault/decode_balanced",
+  "expected": "197.48 / 191.39"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3-compdefault/decode_4stream",
+  "expected": "470.0 / 613.2"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3-compdefault/accept_len",
+  "expected": "2.2098 / 2.2126"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3-compdefault/steps_per_s",
+  "expected": "86.023 / 86.851"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3-compdefault/kv_pool_tokens",
+  "expected": "583,783"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "gh200-vllm-fn@69d3/kv_pool_tokens",
+  "expected": "588,648"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-03/decode_short",
+  "expected": "55.94 / 55.95"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-03/decode_balanced",
+  "expected": "55.90 / 55.90"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-03/decode_4stream",
+  "expected": "208.2 / 208.2"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-03/prefill_cold",
+  "expected": "11,181 / 11,225"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-03/ttft_cold",
+  "expected": "0.340 / 0.339"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-01/decode_short",
+  "expected": "102.49 / 102.50"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-01/decode_balanced",
+  "expected": "96.25 / 96.25"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-01/decode_4stream",
+  "expected": "375.1 / 375.8"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-01/prefill_cold",
+  "expected": "11,041 / 11,013"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-01/ttft_cold",
+  "expected": "0.344 / 0.345"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-01/accept_len",
+  "expected": "2.43 / 2.43"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-01/steps_per_s",
+  "expected": "40.6 / 40.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-08/decode_short",
+  "expected": "105.40 / 105.38"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-08/decode_balanced",
+  "expected": "98.78 / 98.78"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-08/decode_4stream",
+  "expected": "371.0 / 371.3"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-08/prefill_cold",
+  "expected": "10,527 / 10,460"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-08/ttft_cold",
+  "expected": "0.361 / 0.364"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-08/accept_len",
+  "expected": "2.49 / 2.49"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-08/steps_per_s",
+  "expected": "40.5 / 40.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-12/decode_short",
+  "expected": "107.44 / 107.44"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-12/decode_balanced",
+  "expected": "104.59 / 104.59"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-12/decode_4stream",
+  "expected": "381.6 / 382.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-12/prefill_cold",
+  "expected": "10,681 / 10,984"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-12/ttft_cold",
+  "expected": "0.356 / 0.346"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-12/accept_len",
+  "expected": "2.55 / 2.55"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-12/steps_per_s",
+  "expected": "40.9 / 40.9"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04/decode_short",
+  "expected": "115.34 / 115.30"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04/decode_balanced",
+  "expected": "109.80 / 109.72"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04/decode_4stream",
+  "expected": "417.6 / 417.2"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04/prefill_cold",
+  "expected": "10,331 / 10,655"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04/ttft_cold",
+  "expected": "0.368 / 0.357"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04/accept_len",
+  "expected": "2.7 / 2.7"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04/steps_per_s",
+  "expected": "41.3 / 41.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04b/decode_short",
+  "expected": "114.49 / 114.45"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04b/decode_balanced",
+  "expected": "93.16 / 93.16"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04b/decode_4stream",
+  "expected": "397.0 / 397.2"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04b/prefill_cold",
+  "expected": "10,466 / 10,531"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04b/ttft_cold",
+  "expected": "0.363 / 0.361"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04b/accept_len",
+  "expected": "2.56 / 2.56"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-04b/steps_per_s",
+  "expected": "40.9 / 40.9"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-13/decode_short",
+  "expected": "76.56 / 76.58"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-13/decode_balanced",
+  "expected": "76.42 / 76.36"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-13/decode_4stream",
+  "expected": "280.1 / 279.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-13/prefill_cold",
+  "expected": "3,952 / 3,922"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-13/ttft_cold",
+  "expected": "0.962 / 0.970"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-10/decode_short",
+  "expected": "135.29 / 135.38"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-10/decode_balanced",
+  "expected": "115.00 / 114.97"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-10/decode_4stream",
+  "expected": "464.3 / 463.2"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-10/prefill_cold",
+  "expected": "4,000 / 3,935"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-10/ttft_cold",
+  "expected": "0.951 / 0.966"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-10/accept_len",
+  "expected": "2.53 / 2.53"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-10/steps_per_s",
+  "expected": "49.1 / 49.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11/decode_short",
+  "expected": "154.14 / 154.22"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11/decode_balanced",
+  "expected": "126.15 / 126.16"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11/decode_4stream",
+  "expected": "485.5 / 482.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11/prefill_cold",
+  "expected": "3,975 / 3,924"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11/ttft_cold",
+  "expected": "0.957 / 0.969"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11/accept_len",
+  "expected": "2.73 / 2.73"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11/steps_per_s",
+  "expected": "51.5 / 51.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11b/decode_short",
+  "expected": "150.14 / 150.14"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11b/decode_balanced",
+  "expected": "123.46 / 123.40"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11b/decode_4stream",
+  "expected": "485.7 / 483.2"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11b/prefill_cold",
+  "expected": "3,946 / 3,895"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11b/ttft_cold",
+  "expected": "0.964 / 0.976"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11b/accept_len",
+  "expected": "2.58 / 2.58"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11b/steps_per_s",
+  "expected": "52.7 / 52.7"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11c/decode_short",
+  "expected": "144.53 / 144.62"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11c/decode_balanced",
+  "expected": "119.10 / 119.01"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11c/decode_4stream",
+  "expected": "495.2 / 493.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11c/prefill_cold",
+  "expected": "3,930 / 3,896"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11c/ttft_cold",
+  "expected": "0.968 / 0.976"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11c/accept_len",
+  "expected": "2.43 / 2.43"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-11c/steps_per_s",
+  "expected": "54.0 / 54.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07c/decode_short",
+  "expected": "49.37 / 48.91"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07c/decode_balanced",
+  "expected": "49.08 / 48.86"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07c/decode_4stream",
+  "expected": "141.3 / 141.3"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07c/prefill_cold",
+  "expected": "2,056 / 2,052"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07c/ttft_cold",
+  "expected": "1.850 / 1.854"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07b/decode_short",
+  "expected": "89.04 / 88.27"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07b/decode_balanced",
+  "expected": "86.17 / 85.86"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07b/decode_4stream",
+  "expected": "197.5 / 192.8"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07b/prefill_cold",
+  "expected": "1,894 / 1,894"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07b/ttft_cold",
+  "expected": "2.007 / 2.008"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07b/accept_len",
+  "expected": "2.54 / 2.54"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07b/steps_per_s",
+  "expected": "31.8 / 32.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07/decode_short",
+  "expected": "66.87 / 66.36"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07/decode_balanced",
+  "expected": "66.54 / 65.86"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07/decode_4stream",
+  "expected": "146.6 / 168.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07/prefill_cold",
+  "expected": "1,782 / 1,776"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07/ttft_cold",
+  "expected": "2.134 / 2.142"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07/accept_len",
+  "expected": "2.66 / 2.66"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-07/steps_per_s",
+  "expected": "23.4 / 24.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-02/decode_short",
+  "expected": "94.80 / 95.11"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-02/decode_balanced",
+  "expected": "94.80 / 95.09"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-02/decode_4stream",
+  "expected": "244.0 / 307.3"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-02/prefill_cold",
+  "expected": "11,546 / 11,541"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-02/ttft_cold",
+  "expected": "0.329 / 0.330"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-05/decode_short",
+  "expected": "78.24 / 78.35"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-05/decode_balanced",
+  "expected": "77.55 / 77.91"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-05/decode_4stream",
+  "expected": "175.2 / 177.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-05/prefill_cold",
+  "expected": "1,243 / 1,236"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-05/ttft_cold",
+  "expected": "3.059 / 3.076"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-06/decode_short",
+  "expected": "109.19 / 109.27"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-06/decode_balanced",
+  "expected": "100.86 / 99.92"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-06/decode_4stream",
+  "expected": "177.2 / 178.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-06/prefill_cold",
+  "expected": "1,154 / 1,170"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-06/ttft_cold",
+  "expected": "3.296 / 3.249"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-06/accept_len",
+  "expected": "2.29 / 2.29"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-06/steps_per_s",
+  "expected": "42.0 / 42.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-01/decode_short",
+  "expected": "41.88 / 41.70"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-01/decode_balanced",
+  "expected": "41.75 / 41.66"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-01/decode_4stream",
+  "expected": "155.6 / 155.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-01/prefill_cold",
+  "expected": "2,443 / 2,429"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-01/ttft_cold",
+  "expected": "1.557 / 1.566"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-01r/decode_short",
+  "expected": "41.87 / 41.68"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-01r/decode_balanced",
+  "expected": "41.71 / 41.65"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-01r/decode_4stream",
+  "expected": "155.7 / 155.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-01r/prefill_cold",
+  "expected": "2,438 / 2,431"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-01r/ttft_cold",
+  "expected": "1.560 / 1.564"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02/decode_short",
+  "expected": "73.71 / 73.44"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02/decode_balanced",
+  "expected": "70.65 / 70.42"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02/decode_4stream",
+  "expected": "252.9 / 252.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02/prefill_cold",
+  "expected": "2,335 / 2,310"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02/ttft_cold",
+  "expected": "1.629 / 1.646"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02/accept_len",
+  "expected": "2.5 / 2.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02/steps_per_s",
+  "expected": "28.1 / 28.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02c/decode_short",
+  "expected": "75.54 / 75.23"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02c/decode_balanced",
+  "expected": "67.95 / 67.77"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02c/decode_4stream",
+  "expected": "266.3 / 265.8"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02c/prefill_cold",
+  "expected": "2,338 / 2,314"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02c/ttft_cold",
+  "expected": "1.627 / 1.644"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02c/accept_len",
+  "expected": "2.51 / 2.51"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02c/steps_per_s",
+  "expected": "28.1 / 28.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02d/decode_short",
+  "expected": "76.81 / 76.53"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02d/decode_balanced",
+  "expected": "65.99 / 65.80"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02d/decode_4stream",
+  "expected": "275.9 / 275.3"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02d/prefill_cold",
+  "expected": "2,345 / 2,324"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02d/ttft_cold",
+  "expected": "1.622 / 1.636"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02d/accept_len",
+  "expected": "2.48 / 2.48"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02d/steps_per_s",
+  "expected": "28.5 / 28.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02b/decode_short",
+  "expected": "80.74 / 80.37"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02b/decode_balanced",
+  "expected": "73.37 / 73.08"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02b/decode_4stream",
+  "expected": "295.4 / 294.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02b/prefill_cold",
+  "expected": "2,436 / 2,410"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02b/ttft_cold",
+  "expected": "1.561 / 1.578"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02b/accept_len",
+  "expected": "2.48 / 2.48"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-02b/steps_per_s",
+  "expected": "30.6 / 30.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03b/decode_short",
+  "expected": "60.08 / 59.66"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03b/decode_balanced",
+  "expected": "59.87 / 59.55"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03b/decode_4stream",
+  "expected": "217.5 / 216.8"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03b/prefill_cold",
+  "expected": "2,695 / 2,670"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03b/ttft_cold",
+  "expected": "1.411 / 1.424"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03p/decode_short",
+  "expected": "60.05 / 59.56"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03p/decode_balanced",
+  "expected": "59.74 / 59.47"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03p/decode_4stream",
+  "expected": "217.2 / 216.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03p/prefill_cold",
+  "expected": "2,706 / 2,682"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03p/ttft_cold",
+  "expected": "1.406 / 1.418"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03/decode_short",
+  "expected": "103.63 / 102.87"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03/decode_balanced",
+  "expected": "89.52 / 89.07"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03/decode_4stream",
+  "expected": "360.5 / 359.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03/prefill_cold",
+  "expected": "2,674 / 2,640"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03/ttft_cold",
+  "expected": "1.422 / 1.440"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03/accept_len",
+  "expected": "2.49 / 2.49"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03/steps_per_s",
+  "expected": "38.2 / 38.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03r/decode_short",
+  "expected": "103.24 / 102.58"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03r/decode_balanced",
+  "expected": "89.24 / 88.84"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03r/decode_4stream",
+  "expected": "359.7 / 358.2"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03r/prefill_cold",
+  "expected": "2,669 / 2,635"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03r/ttft_cold",
+  "expected": "1.425 / 1.443"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03r/accept_len",
+  "expected": "2.49 / 2.49"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03r/steps_per_s",
+  "expected": "38.1 / 38.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-04/decode_short",
+  "expected": "104.62 / 103.99"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-04/decode_balanced",
+  "expected": "92.21 / 91.72"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-04/decode_4stream",
+  "expected": "347.9 / 346.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-04/prefill_cold",
+  "expected": "2,646 / 2,610"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-04/ttft_cold",
+  "expected": "1.437 / 1.457"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-04/accept_len",
+  "expected": "2.53 / 2.53"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-04/steps_per_s",
+  "expected": "38.0 / 37.9"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07g/decode_short",
+  "expected": "110.64 / 109.93"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07g/decode_balanced",
+  "expected": "105.07 / 104.43"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07g/decode_4stream",
+  "expected": "372.2 / 370.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07g/prefill_cold",
+  "expected": "2,681 / 2,641"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07g/ttft_cold",
+  "expected": "1.418 / 1.440"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07g/accept_len",
+  "expected": "2.52 / 2.52"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07g/steps_per_s",
+  "expected": "41.5 / 41.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07f/decode_short",
+  "expected": "123.94 / 123.12"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07f/decode_balanced",
+  "expected": "95.94 / 95.34"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07f/decode_4stream",
+  "expected": "367.7 / 365.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07f/prefill_cold",
+  "expected": "2,654 / 2,617"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07f/ttft_cold",
+  "expected": "1.433 / 1.453"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07f/accept_len",
+  "expected": "2.69 / 2.69"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07f/steps_per_s",
+  "expected": "40.5 / 40.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07d/decode_short",
+  "expected": "120.71 / 119.90"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07d/decode_balanced",
+  "expected": "99.36 / 98.71"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07d/decode_4stream",
+  "expected": "359.1 / 356.3"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07d/prefill_cold",
+  "expected": "2,648 / 2,607"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07d/ttft_cold",
+  "expected": "1.436 / 1.459"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07d/accept_len",
+  "expected": "2.74 / 2.74"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07d/steps_per_s",
+  "expected": "39.7 / 39.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07e/decode_short",
+  "expected": "122.65 / 121.90"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07e/decode_balanced",
+  "expected": "109.68 / 108.99"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07e/decode_4stream",
+  "expected": "362.6 / 360.2"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07e/prefill_cold",
+  "expected": "2,646 / 2,614"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07e/ttft_cold",
+  "expected": "1.437 / 1.455"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07e/accept_len",
+  "expected": "2.88 / 2.88"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07e/steps_per_s",
+  "expected": "39.3 / 39.2"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-08/decode_short",
+  "expected": "34.75 / 34.61"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-08/decode_balanced",
+  "expected": "34.58 / 34.58"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-08/decode_4stream",
+  "expected": "98.4 / 98.7"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-08/prefill_cold",
+  "expected": "1,188 / 1,189"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-08/ttft_cold",
+  "expected": "3.201 / 3.198"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-09b/decode_short",
+  "expected": "35.18 / 35.05"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-09b/decode_balanced",
+  "expected": "35.04 / 35.00"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-09b/decode_4stream",
+  "expected": "98.6 / 98.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-09b/prefill_cold",
+  "expected": "1,168 / 1,167"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-09b/ttft_cold",
+  "expected": "3.256 / 3.259"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-08b/decode_short",
+  "expected": "60.54 / 60.14"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-08b/decode_balanced",
+  "expected": "58.12 / 58.11"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-08b/decode_4stream",
+  "expected": "149.0 / 146.7"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-08b/prefill_cold",
+  "expected": "1,130 / 1,126"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-08b/ttft_cold",
+  "expected": "3.366 / 3.376"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-08b/accept_len",
+  "expected": "2.48 / 2.49"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-08b/steps_per_s",
+  "expected": "22.5 / 22.9"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-09/decode_short",
+  "expected": "52.64 / 52.07"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-09/decode_balanced",
+  "expected": "46.16 / 45.89"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-09/decode_4stream",
+  "expected": "121.0 / 121.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-09/prefill_cold",
+  "expected": "1,069 / 1,067"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-09/ttft_cold",
+  "expected": "3.558 / 3.565"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-09/accept_len",
+  "expected": "2.83 / 2.83"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-09/steps_per_s",
+  "expected": "16.6 / 16.9"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05/decode_short",
+  "expected": "34.85 / 33.43"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05/decode_balanced",
+  "expected": "32.78 / 29.07"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05/decode_4stream",
+  "expected": "73.6 / 76.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05/prefill_cold",
+  "expected": "145 / 147"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05/ttft_cold",
+  "expected": "26.224 / 25.858"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05b/decode_short",
+  "expected": "33.22 / 36.25"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05b/decode_balanced",
+  "expected": "35.08 / 39.04"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05b/decode_4stream",
+  "expected": "84.4 / 78.7"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05b/prefill_cold",
+  "expected": "218 / 214"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05b/ttft_cold",
+  "expected": "17.457 / 17.748"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05c/decode_short",
+  "expected": "37.95 / 37.18"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05c/decode_balanced",
+  "expected": "37.42 / 38.69"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05c/decode_4stream",
+  "expected": "85.1 / 81.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05c/prefill_cold",
+  "expected": "484 / 487"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-05c/ttft_cold",
+  "expected": "7.851 / 7.816"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06/decode_short",
+  "expected": "48.89 / 52.14"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06/decode_balanced",
+  "expected": "46.78 / 45.69"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06/decode_4stream",
+  "expected": "80.6 / 83.7"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06/prefill_cold",
+  "expected": "142 / 169"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06/ttft_cold",
+  "expected": "26.787 / 22.514"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06/accept_len",
+  "expected": "2.27 / 2.27"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06/steps_per_s",
+  "expected": "17.0 / 15.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06b/decode_short",
+  "expected": "55.22 / 55.29"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06b/decode_balanced",
+  "expected": "50.89 / 51.85"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06b/decode_4stream",
+  "expected": "85.0 / 85.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06b/prefill_cold",
+  "expected": "196 / 198"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06b/ttft_cold",
+  "expected": "19.385 / 19.224"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06b/accept_len",
+  "expected": "2.26 / 2.26"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06b/steps_per_s",
+  "expected": "18.7 / 18.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06c/decode_short",
+  "expected": "53.01 / 54.61"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06c/decode_balanced",
+  "expected": "50.72 / 51.06"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06c/decode_4stream",
+  "expected": "86.3 / 84.3"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06c/prefill_cold",
+  "expected": "448 / 448"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06c/ttft_cold",
+  "expected": "8.486 / 8.493"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06c/accept_len",
+  "expected": "2.27 / 2.26"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06c/steps_per_s",
+  "expected": "17.6 / 18.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-01/image_decode/120f",
+  "expected": "137.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-01/image_ttft/120f",
+  "expected": "35.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V1-01/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07w/decode_short",
+  "expected": "123.89 / 123.03"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07w/decode_balanced",
+  "expected": "95.80 / 95.25"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07w/decode_4stream",
+  "expected": "367.2 / 364.9"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07w/prefill_cold",
+  "expected": "2,655 / 2,614"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07w/ttft_cold",
+  "expected": "1.432 / 1.455"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07w/accept_len",
+  "expected": "2.69 / 2.69"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07w/steps_per_s",
+  "expected": "40.4 / 40.3"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03w/decode_short",
+  "expected": "104.63 / 103.88"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03w/decode_balanced",
+  "expected": "89.46 / 89.05"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03w/decode_4stream",
+  "expected": "358.4 / 357.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03w/prefill_cold",
+  "expected": "2,673 / 2,638"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03w/ttft_cold",
+  "expected": "1.423 / 1.442"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03w/accept_len",
+  "expected": "2.50 / 2.50"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03w/steps_per_s",
+  "expected": "38.2 / 38.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06i/decode_short",
+  "expected": "52.12 / 51.68"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06i/decode_balanced",
+  "expected": "49.54 / 48.95"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06i/decode_4stream",
+  "expected": "70.0 / 69.7"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06i/prefill_cold",
+  "expected": "508 / 504"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06i/ttft_cold",
+  "expected": "7.49 / 7.55"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06i/accept_len",
+  "expected": "2.33 / 2.32"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06i/steps_per_s",
+  "expected": "21.0 / 21.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07w/image_decode/100f",
+  "expected": "54.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07w/image_ttft/100f",
+  "expected": "75.8"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-07w/image_json_ok/100f",
+  "expected": "100"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03w/image_decode/120f",
+  "expected": "29.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03w/image_ttft/120f",
+  "expected": "98.1"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-03w/image_json_ok/120f",
+  "expected": "120"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06i/image_decode/50f",
+  "expected": "52.2"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06i/image_ttft/50f",
+  "expected": "154.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "V2-06i/image_json_ok/50f",
+  "expected": "50"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@0928/decode_short/thinking-on-cold",
+  "expected": "23.3"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@0928/decode_balanced/thinking-on-cold",
+  "expected": "28.4"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@2026-09-25/decode_short/thinking-on-cold",
+  "expected": "24.2–24.6"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@2026-09-25/decode_balanced/thinking-on-cold",
+  "expected": "28.6–30.0"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@2026-09-27/decode_short",
+  "expected": "28.54 / 29.75"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@2026-09-27/decode_balanced",
+  "expected": "27.30 / 27.63"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@2026-09-27/decode_4stream",
+  "expected": "71.8 / 73.3"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@2026-09-27/prefill_cold",
+  "expected": "2,420 / 2,389"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@2026-09-27/ttft_cold",
+  "expected": "1.57 / 1.59"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@2026-09-27/accept_len/thinking-on",
+  "expected": "2.09 / 2.09"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-fn@2026-09-27/steps_per_s/thinking-on",
+  "expected": "12.15 / 12.74"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@2026-09-27/decode_short",
+  "expected": "23.39 / 23.36"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@2026-09-27/decode_balanced",
+  "expected": "21.38 / 21.36"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@2026-09-27/decode_4stream",
+  "expected": "45.5 / 45.5"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@2026-09-27/prefill_cold",
+  "expected": "2,464 / 2,473"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@2026-09-27/ttft_cold",
+  "expected": "1.54 / 1.54"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@2026-09-27/accept_len/thinking-on",
+  "expected": "2.80 / 2.80"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b@2026-09-27/steps_per_s/thinking-on",
+  "expected": "9.00 / 9.01"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-gemma4-26b@0.5.20/decode_short",
+  "expected": "30.65 / 30.65"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-gemma4-26b@0.5.20/decode_balanced",
+  "expected": "30.23 / 30.28"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-llamacpp-muse@b11223/decode_short",
+  "expected": "17.71 / 17.65"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-llamacpp-muse@b11223/decode_balanced",
+  "expected": "26.50 / 26.40"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-qwen36-27b@unrecorded/decode_single",
+  "expected": "16.38"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-gemma4-31b@unrecorded/decode_single",
+  "expected": "~14"
+ },
+ {
+  "view": null,
+  "header": null,
+  "measurement": "dgx-sglang-27b-fp8@unrecorded/decode_single",
+  "expected": "8.0"
  }
 ]
