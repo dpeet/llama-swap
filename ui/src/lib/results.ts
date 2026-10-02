@@ -8,7 +8,7 @@
 
 /** Lists the schema enumerates today. Values outside them are kept (the schema grows), only labelled raw. */
 export const FAMILIES = ["flash-next", "27b", "other"] as const;
-export const LANE_STATUSES = ["production", "rollback", "registered", "retired", "a-b"] as const;
+export const LANE_STATUSES = ["production", "rollback", "registered", "retired", "a-b", "superseded"] as const;
 /** The comparable harness (plan D5): the page shows only these by default. */
 export const FIXED_HARNESS = "fixed-2026-09-27";
 
@@ -32,6 +32,7 @@ export const METRICS: Record<string, MetricInfo> = {
   image_decode: { label: "Image-request decode", unit: "tok/s", higherIsBetter: true },
   image_ttft: { label: "Image-request TTFT", unit: "s", higherIsBetter: false },
   image_json_ok: { label: "Image items read correctly (valid JSON)", unit: "items", higherIsBetter: true },
+  image_accept_len: { label: "Image-request accept length", unit: "tokens/step", higherIsBetter: true },
   decode_prose: { label: "Prose decode", unit: "tok/s", higherIsBetter: true },
   decode_structured: { label: "Structured decode", unit: "tok/s", higherIsBetter: true },
   kv_pool_tokens: { label: "KV pool", unit: "tokens", higherIsBetter: true },
@@ -245,7 +246,7 @@ function strList(value: unknown): string[] {
 }
 
 function strMap(value: unknown): Record<string, string> {
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = Object.create(null);
   if (!isObj(value)) return out;
   for (const [k, v] of Object.entries(value)) if (typeof v === "string") out[k] = v;
   return out;
@@ -467,7 +468,9 @@ function section<T>(
   coerce: (id: string, value: Obj) => T,
   rejected: Rejected[],
 ): Record<string, T> {
-  const out: Record<string, T> = {};
+  // Null-prototype, because record ids are data: "__proto__" would otherwise
+  // set the prototype and "constructor" would resolve to Object's.
+  const out: Record<string, T> = Object.create(null);
   const raw = catalog[key];
   if (raw === undefined) return out;
   if (!isObj(raw)) {
@@ -503,13 +506,13 @@ export function normalizeResults(catalog: unknown, jsonlText: string): ResultsDa
   if (!isObj(catalog)) rejected.push({ id: "catalog.json", reason: "catalog: not a JSON object" });
 
   const configs = section(cat, "configs", "config", coerceConfig, rejected);
-  const lanes: Record<string, Lane> = {};
+  const lanes: Record<string, Lane> = Object.create(null);
   for (const [id, lane] of Object.entries(section(cat, "lanes", "lane", coerceLane, rejected))) {
-    if (!(lane.current_config in configs)) {
+    if (!Object.hasOwn(configs, lane.current_config)) {
       rejected.push({ id, reason: `lane: unknown current_config ${lane.current_config}` });
       continue;
     }
-    if (lane.measured_config !== undefined && !(lane.measured_config in configs)) {
+    if (lane.measured_config !== undefined && !Object.hasOwn(configs, lane.measured_config)) {
       rejected.push({ id, reason: `lane: unknown measured_config ${lane.measured_config}` });
       continue;
     }
@@ -538,7 +541,7 @@ export function normalizeResults(catalog: unknown, jsonlText: string): ResultsDa
     try {
       const m = coerceMeasurement(parsed);
       if (seen.has(m.id)) throw new Reject(`duplicate id (${where}); the first is kept`);
-      if (!(m.config in configs)) throw new Reject(`unknown config ${m.config}`);
+      if (!Object.hasOwn(configs, m.config)) throw new Reject(`unknown config ${m.config}`);
       seen.add(m.id);
       measurements.push(m);
     } catch (cause) {
@@ -734,6 +737,11 @@ export function nearestByRatio<T>(candidates: T[], value: (c: T) => number, targ
 // ---- Lookups -------------------------------------------------------------------
 
 /** Lanes a config stands for: those it is the current or measured config of (render.py lane_for, all matches). */
+/** Codepoint order, as Python's str sort, so the page orders ties the way render.py does (localeCompare doesn't). */
+export function byCodepoint(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 export function lanesForConfig(data: ResultsData, configId: string): Lane[] {
   return Object.values(data.lanes).filter(
     (lane) => lane.current_config === configId || lane.measured_config === configId,

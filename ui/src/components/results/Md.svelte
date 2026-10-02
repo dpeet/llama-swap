@@ -4,9 +4,11 @@
   interface Props {
     text: string;
     class?: string;
+    /** One line as a <span> (code and bold only), for labels inside buttons and headings. */
+    inline?: boolean;
   }
 
-  let { text, class: className = "" }: Props = $props();
+  let { text, class: className = "", inline: inlineOnly = false }: Props = $props();
 
   type Segment = { kind: "text" | "code" | "bold"; text: string };
   type Block = { kind: "p"; segments: Segment[] } | { kind: "ul"; items: Segment[][] };
@@ -47,16 +49,20 @@
   {/each}
 {/snippet}
 
-<div class="space-y-1.5 {className}">
-  {#each blocks as block, i (i)}
-    {#if block.kind === "ul"}
-      <ul class="list-disc space-y-1 pl-5">
-        {#each block.items as item, j (j)}
-          <li>{@render inline(item)}</li>
-        {/each}
-      </ul>
-    {:else}
-      <p>{@render inline(block.segments)}</p>
-    {/if}
-  {/each}
-</div>
+{#if inlineOnly}
+  <span class={className}>{@render inline(segments(text.replaceAll("\n", " ")))}</span>
+{:else}
+  <div class="space-y-1.5 {className}">
+    {#each blocks as block, i (i)}
+      {#if block.kind === "ul"}
+        <ul class="list-disc space-y-1 pl-5">
+          {#each block.items as item, j (j)}
+            <li>{@render inline(item)}</li>
+          {/each}
+        </ul>
+      {:else}
+        <p>{@render inline(block.segments)}</p>
+      {/if}
+    {/each}
+  </div>
+{/if}

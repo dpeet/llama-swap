@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Check, Copy } from "@lucide/svelte";
   import {
+    byCodepoint,
     formatMeasurement,
     harnessLabel,
     lanesForConfig,
@@ -47,7 +48,7 @@
     };
     return data.measurements
       .filter((m) => m.config === config.id)
-      .sort((a, b) => rank(a) - rank(b) || (a.date ?? "").localeCompare(b.date ?? "") || a.id.localeCompare(b.id));
+      .sort((a, b) => rank(a) - rank(b) || byCodepoint(a.date ?? "", b.date ?? "") || byCodepoint(a.id, b.id));
   });
   let predecessors = $derived(predecessorsOf(data, new Set(measurements.map((m) => m.id))));
   // A lane's current config with no numbers of its own points at the config that was measured.
@@ -111,7 +112,7 @@
   <Dialog.Content bind:ref={contentEl} class="flex max-h-[90vh] w-[95%] flex-col gap-0 p-0 sm:max-w-3xl">
     {#if config}
       <Dialog.Header class="border-border border-b px-4 py-3">
-        <Dialog.Title class="pr-6 text-base font-semibold">{config.label}</Dialog.Title>
+        <Dialog.Title class="pr-6 text-base font-semibold"><Md inline text={config.label} /></Dialog.Title>
         <Dialog.Description class="flex flex-wrap items-center gap-1.5">
           <CopyableId value={config.id} class="font-mono text-xs" />
           {#each lanes as lane (lane.id)}<LaneStatus status={lane.status} title={lane.label} />{/each}
@@ -119,6 +120,74 @@
       </Dialog.Header>
 
       <div class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 text-sm">
+        <!-- Measurements first: the numbers are what the dialog is opened for. -->
+        <section>
+          {@render sectionTitle(`Measurements (${measurements.length})`)}
+          {#if measurements.length === 0}
+            <p class="text-muted-foreground">No measurements recorded for this config.</p>
+          {:else}
+            <div class="space-y-2">
+              {#each measurements as m (m.id)}
+                {@const info = metricInfo(m.metric)}
+                <div class="rounded-md border p-3 {m.superseded_by ? 'opacity-75' : ''}">
+                  <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <div class="font-medium">
+                      {info.label}{#if qualifierOf(m)}<span class="text-muted-foreground font-normal">{` · ${qualifierOf(m)}`}</span>{/if}
+                    </div>
+                    <div class="font-mono tabular-nums">
+                      {formatMeasurement(m)} <span class="text-muted-foreground font-sans text-xs">{m.unit}</span>
+                    </div>
+                  </div>
+                  <div class="mt-1.5 flex flex-wrap items-center gap-1">
+                    <Badge variant={m.harness === "fixed-2026-09-27" ? "secondary" : "outline"}>{harnessLabel(m.harness)}</Badge>
+                    {#if thinkingText(m)}<Badge variant="outline">{thinkingText(m)}</Badge>{/if}
+                    {#if m.access}<Badge variant="outline">{m.access}</Badge>{/if}
+                    {#if m.residency}<Badge variant="outline">{m.residency}</Badge>{/if}
+                    {#if m.decode_definition}<Badge variant="outline">{m.decode_definition}</Badge>{/if}
+                    {#if m.superseded_by}<Badge variant="destructive">superseded</Badge>{/if}
+                  </div>
+                  <p class="text-muted-foreground mt-1.5 text-xs">
+                    {[
+                      m.runs && m.runs.length > 1 ? `${m.runs.length} runs, mean ${formatMeasurement(m, { aggregate: "mean" })}` : null,
+                      m.range ? "range only" : null,
+                      conditionsText(m) || null,
+                      m.date,
+                      m.campaign ? (data.campaigns[m.campaign]?.label ?? m.campaign) : null,
+                      m.harness_commit ? `harness ${m.harness_commit}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                  {#if m.caveats.length > 0}
+                    <ul class="mt-2 space-y-1 text-xs">
+                      {#each m.caveats as id (id)}
+                        <li class="flex gap-1.5">
+                          <span class="text-muted-foreground shrink-0">{data.caveats[id]?.mark ?? "•"}</span>
+                          {#if data.caveats[id]}<Md text={data.caveats[id].text_md} />{:else}<span class="font-mono">{id}</span>{/if}
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
+                  {#if m.note}<Md class="mt-2 text-xs" text={m.note} />{/if}
+                  {#if m.evidence.length > 0 || m.history_section || m.superseded_by}
+                    <dl class="mt-2 space-y-0.5 text-xs">
+                      {#each m.evidence as path (path)}
+                        <div class="flex gap-2"><dt class="text-muted-foreground w-16 shrink-0">evidence</dt><dd class="min-w-0"><CopyableId value={path} class="font-mono" /></dd></div>
+                      {/each}
+                      {#if m.history_section}
+                        <div class="flex gap-2"><dt class="text-muted-foreground w-16 shrink-0">history</dt><dd class="min-w-0"><CopyableId value={m.history_section} /></dd></div>
+                      {/if}
+                      {#if m.superseded_by}
+                        <div class="flex gap-2"><dt class="text-muted-foreground w-16 shrink-0">replaced by</dt><dd class="min-w-0"><CopyableId value={m.superseded_by} class="font-mono" /></dd></div>
+                      {/if}
+                    </dl>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </section>
+
         <section>
           {@render sectionTitle("Configuration")}
           <dl class="divide-border divide-y">
@@ -159,7 +228,7 @@
               <dd class="min-w-0 space-y-0.5">
                 <div>{checkpoint?.name ?? config.checkpoint}{checkpoint?.precision ? ` · ${checkpoint.precision}` : ""}</div>
                 {#if checkpoint?.source}<Md class="text-muted-foreground text-xs" text={checkpoint.source} />{/if}
-                {#if checkpoint?.revision}<CopyableId value={checkpoint.revision} class="font-mono text-xs" />{/if}
+                {#if checkpoint?.revision && !checkpoint.source?.includes(checkpoint.revision)}<CopyableId value={checkpoint.revision} class="font-mono text-xs" />{/if}
                 {#if checkpoint?.notes_md}<Md class="text-muted-foreground text-xs" text={checkpoint.notes_md} />{/if}
               </dd>
             </div>
@@ -241,73 +310,6 @@
             {/each}
           </section>
         {/if}
-
-        <section>
-          {@render sectionTitle(`Measurements (${measurements.length})`)}
-          {#if measurements.length === 0}
-            <p class="text-muted-foreground">No measurements recorded for this config.</p>
-          {:else}
-            <div class="space-y-2">
-              {#each measurements as m (m.id)}
-                {@const info = metricInfo(m.metric)}
-                <div class="rounded-md border p-3 {m.superseded_by ? 'opacity-75' : ''}">
-                  <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <div class="font-medium">
-                      {info.label}{#if qualifierOf(m)}<span class="text-muted-foreground font-normal"> · {qualifierOf(m)}</span>{/if}
-                    </div>
-                    <div class="font-mono tabular-nums">
-                      {formatMeasurement(m)} <span class="text-muted-foreground font-sans text-xs">{m.unit}</span>
-                    </div>
-                  </div>
-                  <div class="mt-1.5 flex flex-wrap items-center gap-1">
-                    <Badge variant={m.harness === "fixed-2026-09-27" ? "secondary" : "outline"}>{harnessLabel(m.harness)}</Badge>
-                    {#if thinkingText(m)}<Badge variant="outline">{thinkingText(m)}</Badge>{/if}
-                    {#if m.access}<Badge variant="outline">{m.access}</Badge>{/if}
-                    {#if m.residency}<Badge variant="outline">{m.residency}</Badge>{/if}
-                    {#if m.decode_definition}<Badge variant="outline">{m.decode_definition}</Badge>{/if}
-                    {#if m.superseded_by}<Badge variant="destructive">superseded</Badge>{/if}
-                  </div>
-                  <p class="text-muted-foreground mt-1.5 text-xs">
-                    {[
-                      m.runs && m.runs.length > 1 ? `${m.runs.length} runs, mean ${formatMeasurement(m, { aggregate: "mean" })}` : null,
-                      m.range ? "range only" : null,
-                      conditionsText(m) || null,
-                      m.date,
-                      m.campaign ? (data.campaigns[m.campaign]?.label ?? m.campaign) : null,
-                      m.harness_commit ? `harness ${m.harness_commit}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                  {#if m.caveats.length > 0}
-                    <ul class="mt-2 space-y-1 text-xs">
-                      {#each m.caveats as id (id)}
-                        <li class="flex gap-1.5">
-                          <span class="text-muted-foreground shrink-0">{data.caveats[id]?.mark ?? "•"}</span>
-                          {#if data.caveats[id]}<Md text={data.caveats[id].text_md} />{:else}<span class="font-mono">{id}</span>{/if}
-                        </li>
-                      {/each}
-                    </ul>
-                  {/if}
-                  {#if m.note}<Md class="mt-2 text-xs" text={m.note} />{/if}
-                  {#if m.evidence.length > 0 || m.history_section || m.superseded_by}
-                    <dl class="mt-2 space-y-0.5 text-xs">
-                      {#each m.evidence as path (path)}
-                        <div class="flex gap-2"><dt class="text-muted-foreground w-16 shrink-0">evidence</dt><dd class="min-w-0"><CopyableId value={path} class="font-mono" /></dd></div>
-                      {/each}
-                      {#if m.history_section}
-                        <div class="flex gap-2"><dt class="text-muted-foreground w-16 shrink-0">history</dt><dd class="min-w-0"><CopyableId value={m.history_section} /></dd></div>
-                      {/if}
-                      {#if m.superseded_by}
-                        <div class="flex gap-2"><dt class="text-muted-foreground w-16 shrink-0">replaced by</dt><dd class="min-w-0"><CopyableId value={m.superseded_by} class="font-mono" /></dd></div>
-                      {/if}
-                    </dl>
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </section>
 
         {#if predecessors.length > 0}
           <section>

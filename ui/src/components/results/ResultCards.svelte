@@ -4,6 +4,7 @@
   import { caveatMarks, cellEntries, textCell, type ColumnDef, type ResultRow } from "../../lib/resultsTable";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import LaneStatus from "./LaneStatus.svelte";
+  import Md from "./Md.svelte";
 
   interface Props {
     data: ResultsData;
@@ -28,7 +29,7 @@
       >
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0">
-            <div class="text-sm font-medium">{row.config.label}</div>
+            <div class="text-sm font-medium"><Md inline text={row.config.label} /></div>
             <div class="text-muted-foreground mt-0.5 text-xs">
               {textColumns.map((c) => textCell(row, c.id)).join(" · ")}
             </div>
@@ -52,7 +53,7 @@
                   <dt class="text-muted-foreground text-xs">{column.label} <span class="opacity-70">{column.unit}</span></dt>
                   {#each entries as entry (entry.measurement.id)}
                     <dd class="font-mono text-sm tabular-nums">
-                      {#if entries.length > 1 && entry.qualifier}<span class="text-muted-foreground font-sans text-xs">{entry.qualifier} </span>{/if}{entry.text}{#each caveatMarks(data, entry.measurement) as caveat (caveat.mark)}<sup
+                      {#if entries.length > 1 && entry.qualifier}<span class="text-muted-foreground block font-sans text-xs">{entry.qualifier}</span>{/if}{entry.text}{#each caveatMarks(data, entry.measurement) as caveat (caveat.mark)}<sup
                           class="text-muted-foreground ml-0.5">{caveat.mark}</sup
                         >{/each}
                     </dd>

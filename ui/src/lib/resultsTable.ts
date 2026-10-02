@@ -43,6 +43,7 @@ const SHORT_LABELS: Record<string, string> = {
   image_decode: "Image decode",
   image_ttft: "Image TTFT",
   image_json_ok: "Image JSON ok",
+  image_accept_len: "Image accept len",
   decode_prose: "Prose",
   decode_structured: "Structured",
   kv_pool_tokens: "KV pool",
@@ -62,8 +63,12 @@ export function metricColumns(data: ResultsData): ColumnDef[] {
   return [...known, ...unknown].map(metricColumn);
 }
 
-/** The quoted numbers plus where each config ran and on what build. */
-export const DEFAULT_VISIBLE_COLUMNS = ["host", "build", "decode_short", "decode_balanced", "decode_4stream", "prefill_cold", "ttft_cold"];
+/**
+ * The quoted numbers plus where each config ran. Build is left to the Columns
+ * menu, because its long keys pushed Prefill and TTFT off a 1440 px screen with
+ * the sidebar open (and the detail dialog shows it anyway).
+ */
+export const DEFAULT_VISIBLE_COLUMNS = ["host", "decode_short", "decode_balanced", "decode_4stream", "prefill_cold", "ttft_cold"];
 
 /** Restores the persisted column list; anything but a list of strings falls back to the defaults. */
 export function normalizeVisibleColumns(raw: unknown): string[] {
@@ -125,16 +130,23 @@ export interface CellEntry {
   qualifier: string | null;
 }
 
-export function qualifierOf(m: Measurement): string | null {
+/**
+ * The id's qualifier (the part after config/metric). With `inSharedCell`, an
+ * unqualified id falls back to its date, because a cell holding several
+ * sessions must label every one of them, not only the qualified ones.
+ */
+export function qualifierOf(m: Measurement, inSharedCell = false): string | null {
   const parts = m.id.split("/");
-  return parts.length > 2 ? parts.slice(2).join("/") : null;
+  if (parts.length > 2) return parts.slice(2).join("/");
+  return inSharedCell ? (m.date ?? null) : null;
 }
 
 export function cellEntries(row: ResultRow, metric: string): CellEntry[] {
-  return (row.byMetric.get(metric) ?? []).map((measurement) => ({
+  const list = row.byMetric.get(metric) ?? [];
+  return list.map((measurement) => ({
     measurement,
     text: formatMeasurement(measurement),
-    qualifier: qualifierOf(measurement),
+    qualifier: qualifierOf(measurement, list.length > 1),
   }));
 }
 

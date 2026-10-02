@@ -5,6 +5,7 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import LaneStatus from "./LaneStatus.svelte";
+  import Md from "./Md.svelte";
 
   interface Props {
     data: ResultsData;
@@ -72,7 +73,7 @@
                 onselect(row.config.id);
               }}
             >
-              {row.config.label}
+              <Md inline text={row.config.label} />
             </button>
             <div class="mt-1 flex flex-wrap items-center gap-1">
               <span class="text-muted-foreground mr-1 font-mono text-xs">{row.config.id}</span>
@@ -93,8 +94,10 @@
                   <span class="text-muted-foreground">—</span>
                 {:else}
                   {#each entries as entry (entry.measurement.id)}
-                    <div class="whitespace-nowrap">
-                      {#if entries.length > 1 && entry.qualifier}<span class="text-muted-foreground font-sans">{entry.qualifier} </span>{/if}{entry.text}{#each caveatMarks(data, entry.measurement) as caveat (caveat.mark)}<sup
+                    <!-- The session label sits on its own line, because inline it widened every
+                         multi-session column enough to push Prefill and TTFT off a 1440 px screen. -->
+                    <div class="whitespace-nowrap not-first:mt-1">
+                      {#if entries.length > 1 && entry.qualifier}<div class="text-muted-foreground font-sans text-[11px] leading-tight">{entry.qualifier}</div>{/if}{entry.text}{#each caveatMarks(data, entry.measurement) as caveat (caveat.mark)}<sup
                           class="text-muted-foreground ml-0.5 cursor-help"
                           title={caveat.text}>{caveat.mark}</sup
                         >{/each}
@@ -103,7 +106,7 @@
                 {/if}
               </Table.Cell>
             {:else}
-              <Table.Cell class="align-top text-xs {column.id === 'build' ? 'font-mono' : ''}">{textCell(row, column.id)}</Table.Cell>
+              <Table.Cell class="min-w-24 align-top text-xs whitespace-normal {column.id === 'build' ? 'font-mono' : ''}">{textCell(row, column.id)}</Table.Cell>
             {/if}
           {/each}
         </Table.Row>

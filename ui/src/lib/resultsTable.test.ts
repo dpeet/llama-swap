@@ -62,6 +62,12 @@ describe("rows", () => {
     expect(qualifierOf(data.measurements[0])).toBeNull();
   });
 
+  it("labels an unqualified measurement by its date when it shares a cell", () => {
+    const unqualified = { ...data.measurements[0], date: "2026-09-28" };
+    expect(qualifierOf(unqualified, true)).toBe("2026-09-28");
+    expect(qualifierOf({ ...unqualified, date: undefined }, true)).toBeNull();
+  });
+
   it("shows caveat marks, and the raw id for an unknown caveat", () => {
     const m = { ...data.measurements[0], caveats: ["rg-on-node", "nope"] };
     expect(caveatMarks(data, m).map((c) => c.mark)).toEqual(["ʰ", "[nope]"]);

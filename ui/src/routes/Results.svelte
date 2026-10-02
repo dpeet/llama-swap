@@ -138,7 +138,7 @@
       return "llama-swap has no LLAMA_SWAP_RESULTS_DIR, so it has no results directory to serve. Set it to artisanal-inference's docs/results in serve/compose.llama-swap.yaml.";
     if (errorCode === "results_file_missing")
       return "LLAMA_SWAP_RESULTS_DIR is set, but catalog.json or measurements.jsonl isn't in it. Check the path and the read-only mount.";
-    if (errorCode === "results_read_failed") return "The files exist but llama-swap couldn't read them; check their permissions.";
+    if (errorCode === "results_read_failed") return "The files exist but llama-swap couldn't read them. Check their permissions, and that each is a regular file in that directory (a symlink pointing outside it is refused); llama-swap's log has the exact error.";
     if (errorCode === "bad_response") return "Something other than llama-swap answered, or catalog.json isn't valid JSON.";
     return "";
   });
