@@ -20,9 +20,11 @@
     families: string[];
     onchange: (patch: Partial<ResultsFilters>) => void;
     onselect: (configId: string) => void;
+    /** Under HostCompare's "show all configs": no controls or ratio line of its own, because the rows above carry them. */
+    embedded?: boolean;
   }
 
-  let { data, filters, points, families, onchange, onselect }: Props = $props();
+  let { data, filters, points, families, onchange, onselect, embedded = false }: Props = $props();
 
   const ALL = "__all__";
   let info = $derived(metricInfo(filters.compareMetric));
@@ -118,7 +120,8 @@
   }
 </script>
 
-<section class="rounded-lg border p-3 sm:p-4" aria-label="Compare a number">
+<section class={embedded ? "" : "rounded-lg border p-3 sm:p-4"} aria-label={embedded ? "Every config" : "Compare a number"}>
+  {#if !embedded}
   <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-1">
       <label class="text-muted-foreground text-xs" for="results-compare-metric">Metric</label>
@@ -194,6 +197,7 @@
       <span class="text-muted-foreground">Type a number someone quoted to see it against DGX production and the nearest RG config.</span>
     {/if}
   </div>
+  {/if}
 
   <div class="mt-2 w-full" bind:clientWidth={width}>
     {#if points.length === 0}

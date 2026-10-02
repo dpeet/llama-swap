@@ -32,6 +32,9 @@ export const COMPARE_METRIC_LABELS: Record<CompareMetric, string> = {
   ttft_cold: "TTFT",
 };
 
+/** The family the host comparison opens on, because Flash-Next is the production model people quote against. */
+export const DEFAULT_COMPARE_FAMILY = "flash-next";
+
 export interface ResultsFilters {
   /** "" means any, for every string filter below. */
   family: string;
@@ -47,6 +50,8 @@ export interface ResultsFilters {
   showSuperseded: boolean;
   search: string;
   compareMetric: CompareMetric;
+  /** The host comparison's model family: its own state, not a table filter, so picking one never narrows the table. */
+  compareFamily: string;
   /** The typed "your number", kept as text so a cleared input stays empty. */
   yours: string;
 }
@@ -63,6 +68,7 @@ export function emptyResultsFilters(): ResultsFilters {
     showSuperseded: false,
     search: "",
     compareMetric: "decode_short",
+    compareFamily: DEFAULT_COMPARE_FAMILY,
     yours: "",
   };
 }
@@ -81,7 +87,7 @@ export function normalizeResultsFilters(raw: unknown): ResultsFilters {
   const filters = emptyResultsFilters();
   if (typeof raw !== "object" || raw === null) return filters;
   const source = raw as Record<string, unknown>;
-  for (const key of ["family", "host", "engine", "metric", "search", "yours"] as const) {
+  for (const key of ["family", "host", "engine", "metric", "search", "yours", "compareFamily"] as const) {
     if (typeof source[key] === "string") filters[key] = source[key] as string;
   }
   filters.thinking = oneOf(source.thinking, THINKING, filters.thinking);
@@ -104,6 +110,7 @@ const QUERY_KEYS = {
   showSuperseded: "superseded",
   search: "q",
   compareMetric: "compare",
+  compareFamily: "compare-family",
   yours: "yours",
 } as const satisfies Record<keyof ResultsFilters, string>;
 
@@ -132,7 +139,7 @@ export function resultsFiltersFromQuery(querystring: string | undefined): Result
   return normalizeResultsFilters(raw);
 }
 
-/** How many table filters are set (the compare strip's metric and number aren't filters). */
+/** How many table filters are set (the comparison's metric, family and number aren't filters). */
 export function activeFilterCount(filters: ResultsFilters): number {
   const defaults = emptyResultsFilters();
   const keys = ["family", "host", "engine", "metric", "thinking", "status", "comparability", "showSuperseded", "search"] as const;
