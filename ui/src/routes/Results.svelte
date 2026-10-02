@@ -6,7 +6,6 @@
   import { persistentStore } from "../stores/persistent";
   import { normalizeResults, type ResultsData } from "../lib/results";
   import {
-    comparePoints,
     configsShown,
     emptyResultsFilters,
     resultsFiltersFromQuery,
@@ -26,7 +25,7 @@
   } from "../lib/resultsTable";
   import { IsMobile } from "$lib/hooks/is-mobile.svelte.js";
   import { Button } from "$lib/components/ui/button/index.js";
-  import CompareStrip from "../components/results/CompareStrip.svelte";
+  import HostCompare from "../components/results/HostCompare.svelte";
   import FilterBar from "../components/results/FilterBar.svelte";
   import ResultsTable from "../components/results/ResultsTable.svelte";
   import ResultCards from "../components/results/ResultCards.svelte";
@@ -86,7 +85,12 @@
 
   function resetFilters(): void {
     // Keep the comparison itself; reset only what narrows the table.
-    setFilters({ ...emptyResultsFilters(), compareMetric: filters.compareMetric, yours: filters.yours });
+    setFilters({
+      ...emptyResultsFilters(),
+      compareMetric: filters.compareMetric,
+      compareFamily: filters.compareFamily,
+      yours: filters.yours,
+    });
   }
 
   // ---- Columns (persisted per browser) and sort
@@ -107,9 +111,6 @@
   let shown = $derived(data ? shownMeasurements(data, filters) : new Map());
   let configs = $derived(data ? configsShown(data, filters, shown) : []);
   let rows = $derived(data ? sortRows(buildRows(data, configs, shown), sort, allColumns) : []);
-  // The strip ignores the table's metric filter (a different metric would empty it) but honours the rest.
-  let stripConfigs = $derived(data ? configsShown(data, { ...filters, metric: "" }, shown) : []);
-  let points = $derived(data ? comparePoints(data, filters, stripConfigs) : []);
 
   function options(values: Iterable<[string, string]>): { value: string; label: string }[] {
     return [...new Map(values)].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
@@ -202,7 +203,7 @@
         <p class="mt-1">catalog.json has no configs. They appear here once records are added to docs/results/.</p>
       </div>
     {:else}
-      <CompareStrip {data} {filters} {points} {families} onchange={update} onselect={(id) => (selectedId = id)} />
+      <HostCompare {data} {filters} {families} onchange={update} onselect={(id) => (selectedId = id)} />
 
       <div class="mt-4">
         <FilterBar

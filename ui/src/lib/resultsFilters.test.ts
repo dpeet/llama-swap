@@ -76,11 +76,12 @@ describe("querystring round trip", () => {
       showSuperseded: true,
       search: "fp8 kv",
       compareMetric: "ttft_cold",
+      compareFamily: "27b",
       yours: "0.4",
     });
     const query = resultsFiltersToQuery(set);
     expect(query).toBe(
-      "family=flash-next&host=violet1&engine=vllm&metric=prefill_cold&thinking=off&status=production&harness=all&superseded=1&q=fp8+kv&compare=ttft_cold&yours=0.4",
+      "family=flash-next&host=violet1&engine=vllm&metric=prefill_cold&thinking=off&status=production&harness=all&superseded=1&q=fp8+kv&compare=ttft_cold&compare-family=27b&yours=0.4",
     );
     expect(resultsFiltersFromQuery(query)).toEqual(set);
     expect(resultsFiltersFromQuery("?" + query)).toEqual(set);
@@ -95,7 +96,7 @@ describe("querystring round trip", () => {
 describe("activeFilterCount", () => {
   it("counts table filters, not the compare strip's metric or number", () => {
     expect(activeFilterCount(emptyResultsFilters())).toBe(0);
-    expect(activeFilterCount(filters({ compareMetric: "ttft_cold", yours: "3" }))).toBe(0);
+    expect(activeFilterCount(filters({ compareMetric: "ttft_cold", compareFamily: "27b", yours: "3" }))).toBe(0);
     expect(activeFilterCount(filters({ family: "27b", comparability: "all", search: " x " }))).toBe(3);
   });
 });
