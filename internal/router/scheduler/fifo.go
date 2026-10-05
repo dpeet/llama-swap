@@ -887,20 +887,14 @@ func (s *FIFO) startSwap(initial HandlerReq, evict, running []string) {
 // a surprise eviction can be traced to whoever asked (grep "swap-start"). It
 // also fires for an eviction-only swap (target already Ready, planner evicts
 // others). It carries its own UTC timestamp because the logger's is optional
-// (logTimeFormat) and journalctl prints local time. Values are quoted so a
-// User-Agent with spaces stays one field and a newline cannot forge a line.
+// (logTimeFormat) and journalctl prints local time.
 func swapStartLine(now time.Time, req HandlerReq, evict []string) string {
 	evicting := "none"
 	if len(evict) > 0 {
 		evicting = strings.Join(evict, ",")
 	}
-	client := req.Requester.Client
-	if client == "" {
-		client = "internal"
-	}
-	line := fmt.Sprintf("swap-start at=%s model=%q evicting=%q client=%q ip=%q method=%q path=%q ua=%q",
-		now.UTC().Format(time.RFC3339), req.Model, evicting, client,
-		req.Requester.IP, req.Requester.Method, req.Requester.Path, req.Requester.UserAgent)
+	line := fmt.Sprintf("swap-start at=%s model=%q evicting=%q %s",
+		now.UTC().Format(time.RFC3339), req.Model, evicting, req.Requester.LogFields())
 	if isAdopt(req) {
 		line += " trigger=adopt"
 	}

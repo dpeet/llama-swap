@@ -9,10 +9,13 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/mostlygeek/llama-swap/internal/config"
 	"github.com/mostlygeek/llama-swap/internal/logmon"
+	"github.com/mostlygeek/llama-swap/internal/process"
 )
 
 func TestServer_DecompressBody(t *testing.T) {
@@ -308,6 +311,77 @@ func TestServer_HandleAPICapture(t *testing.T) {
 		s.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/captures/abc", nil))
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("status = %d, want 400", w.Code)
+		}
+	})
+}
+
+// lockedWriter collects log output written while a handler runs.
+type lockedWriter struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *lockedWriter) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
+
+// TestServer_UnloadRequestLogged verifies every unload route logs who asked and
+// which running models it stops, and that a rejected unload logs nothing.
+func TestServer_UnloadRequestLogged(t *testing.T) {
+	local := newStubRouter([]string{"m1", "m2"}, "")
+	local.running = map[string]process.ProcessState{"m1": process.StateReady, "m2": process.StateReady}
+	s := newTestServer(local, newStubRouter(nil, ""))
+	s.cfg = config.Config{Models: map[string]config.ModelConfig{"m1": {}, "m2": {}, "m3": {}}}
+	local.models["m3"] = true
+
+	fields := `client="ts:dpeet@github" ip="100.104.58.14"`
+	tests := []struct {
+		name, method, path, want string
+	}{
+		{"one running model", http.MethodPost, "/api/models/unload/m1", `models="m1" stopping="m1" ` + fields + ` method="POST" path="/api/models/unload/m1" ua="opencode/1.18.33"`},
+		{"one stopped model", http.MethodPost, "/api/models/unload/m3", `models="m3" stopping="none" `},
+		{"unload all", http.MethodPost, "/api/models/unload", `models="all" stopping="m1,m2" ` + fields},
+		{"legacy unload all", http.MethodGet, "/unload", `models="all" stopping="m1,m2" ` + fields + ` method="GET" path="/unload"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var logs lockedWriter
+			s.logs = logmon.NewGroup(&logs, true, false, false)
+			r := httptest.NewRequest(tt.method, tt.path, nil)
+			r.Header.Set("Tailscale-User-Login", "dpeet@github")
+			r.Header.Set("X-Forwarded-For", "100.104.58.14")
+			r.Header.Set("User-Agent", "opencode/1.18.33")
+			w := httptest.NewRecorder()
+			s.ServeHTTP(w, r)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d", w.Code)
+			}
+			got := logs.String()
+			if !strings.Contains(got, "unload-request at=") || !strings.Contains(got, tt.want) {
+				t.Errorf("log %q missing %q", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("unknown model logs nothing", func(t *testing.T) {
+		var logs lockedWriter
+		s.logs = logmon.NewGroup(&logs, true, false, false)
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/models/unload/nope", nil))
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404", w.Code)
+		}
+		if strings.Contains(logs.String(), "unload-request") {
+			t.Errorf("rejected unload was logged: %q", logs.String())
 		}
 	})
 }

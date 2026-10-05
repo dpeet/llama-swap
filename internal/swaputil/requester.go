@@ -1,6 +1,7 @@
 package swaputil
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -64,6 +65,18 @@ func RequesterFrom(r *http.Request) Requester {
 		Path:      path,
 		UserAgent: r.Header.Get("User-Agent"),
 	}
+}
+
+// LogFields formats the requester as the client=, ip=, method=, path= and ua=
+// fields shared by the swap-start and unload-request log lines, with "internal"
+// for a request that has no peer (preload, adopt). Values are quoted so a
+// User-Agent with spaces stays one field and a newline cannot forge a line.
+func (q Requester) LogFields() string {
+	client := q.Client
+	if client == "" {
+		client = "internal"
+	}
+	return fmt.Sprintf("client=%q ip=%q method=%q path=%q ua=%q", client, q.IP, q.Method, q.Path, q.UserAgent)
 }
 
 // forwardedIP returns the first X-Forwarded-For hop, or "". X-Real-IP is not

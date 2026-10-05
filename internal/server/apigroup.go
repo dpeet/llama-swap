@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -159,6 +160,7 @@ func (s *Server) modelStatus() []apiModel {
 
 // handleAPIUnloadAll stops every running local process.
 func (s *Server) handleAPIUnloadAll(w http.ResponseWriter, r *http.Request) {
+	s.logUnloadRequest(r)
 	s.local.Unload(0)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"msg": "ok"})
@@ -176,9 +178,41 @@ func (s *Server) handleAPIUnloadModel(w http.ResponseWriter, r *http.Request) {
 		swaputil.SendResponse(w, r, http.StatusNotFound, "no local server found for requested model")
 		return
 	}
+	s.logUnloadRequest(r, realName)
 	s.local.Unload(0, realName)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
+}
+
+// logUnloadRequest logs who asked to unload which models, before Unload blocks
+// on the stops, so an eviction by the UI stop button or the unload API is as
+// traceable as one caused by a load (grep "unload-request" beside
+// "swap-start"). No targets means unload-all.
+func (s *Server) logUnloadRequest(r *http.Request, targets ...string) {
+	s.logs.ProxyLogs.Infof("%s", unloadRequestLine(time.Now(), swaputil.RequesterFrom(r), targets, s.local.RunningModels()))
+}
+
+// unloadRequestLine formats the unload-request line. stopping lists the
+// targeted models that were running (any non-stopped state), so it reads like
+// swap-start's evicting.
+func unloadRequestLine(now time.Time, req swaputil.Requester, targets []string, running map[string]process.ProcessState) string {
+	models := "all"
+	if len(targets) > 0 {
+		models = strings.Join(targets, ",")
+	}
+	var stopping []string
+	for id := range running {
+		if len(targets) == 0 || slices.Contains(targets, id) {
+			stopping = append(stopping, id)
+		}
+	}
+	sort.Strings(stopping)
+	stoppingField := "none"
+	if len(stopping) > 0 {
+		stoppingField = strings.Join(stopping, ",")
+	}
+	return fmt.Sprintf("unload-request at=%s models=%q stopping=%q %s",
+		now.UTC().Format(time.RFC3339), models, stoppingField, req.LogFields())
 }
 
 // handleAPIActivity serves paginated activity table rows.
