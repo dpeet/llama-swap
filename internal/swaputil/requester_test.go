@@ -28,11 +28,11 @@ func TestRequesterFrom(t *testing.T) {
 			wantIP:     "100.64.0.9",
 		},
 		{
-			name:       "x-real-ip fallback",
+			name:       "x-real-ip is ignored",
 			remoteAddr: "127.0.0.1:51000",
-			headers:    map[string]string{"X-Real-IP": " 100.64.0.7 "},
-			wantClient: "xff:100.64.0.7",
-			wantIP:     "100.64.0.7",
+			headers:    map[string]string{"X-Real-IP": "100.64.0.7"},
+			wantClient: "ip:127.0.0.1",
+			wantIP:     "127.0.0.1",
 		},
 		{
 			name:       "direct loopback caller",
