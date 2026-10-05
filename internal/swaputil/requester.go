@@ -12,7 +12,7 @@ import (
 type Requester struct {
 	// Client is the best available identity: "ts:<login>" from tailscale
 	// serve's Tailscale-User-Login header (user-owned devices only; tagged
-	// devices get none), else "xff:<ip>" from X-Forwarded-For/X-Real-IP, else
+	// devices get none), else "xff:<ip>" from X-Forwarded-For, else
 	// "ip:<host>" from the TCP peer. Empty for internal requests (preload,
 	// adopt), which have no peer.
 	Client string
@@ -66,13 +66,10 @@ func RequesterFrom(r *http.Request) Requester {
 	}
 }
 
-// forwardedIP returns the first X-Forwarded-For hop, else X-Real-IP, else "".
+// forwardedIP returns the first X-Forwarded-For hop, or "". X-Real-IP is not
+// read because tailscale serve never sets it, so only a local caller could
+// supply it, and it would outrank the real peer address.
 func forwardedIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		first, _, _ := strings.Cut(xff, ",")
-		if trimmed := strings.TrimSpace(first); trimmed != "" {
-			return trimmed
-		}
-	}
-	return strings.TrimSpace(r.Header.Get("X-Real-IP"))
+	first, _, _ := strings.Cut(r.Header.Get("X-Forwarded-For"), ",")
+	return strings.TrimSpace(first)
 }
