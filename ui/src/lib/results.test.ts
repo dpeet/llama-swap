@@ -319,16 +319,20 @@ describe("predecessorsOf", () => {
 });
 
 // The live schema, not a fixture copy, because the point is to catch the UI's
-// lists falling behind the schema; skipped when docs/results isn't mounted.
+// lists falling behind the schema; read only when present, because vitest
+// runs a skipped describe's body at collection.
 const liveSchemaPath = "/opt/ai/artisanal-inference/docs/results/schema.json";
 
-describe.skipIf(!existsSync(liveSchemaPath))("UI lists match schema.json", () => {
-  const schema = JSON.parse(readFileSync(liveSchemaPath, "utf8")) as {
-    $defs: {
-      metric: { enum: string[]; "x-metrics": Record<string, { unit: string; label: string }> };
-      lane: { properties: { status: { enum: string[] } } };
-    };
+type LiveSchema = {
+  $defs: {
+    metric: { enum: string[]; "x-metrics": Record<string, { unit: string; label: string }> };
+    lane: { properties: { status: { enum: string[] } } };
   };
+};
+const liveSchema: LiveSchema | undefined = existsSync(liveSchemaPath) ? JSON.parse(readFileSync(liveSchemaPath, "utf8")) : undefined;
+
+describe.skipIf(!liveSchema)("UI lists match schema.json", () => {
+  const schema = liveSchema!;
 
   it("knows every metric, with the schema's label and unit", () => {
     const { enum: metricEnum, "x-metrics": xMetrics } = schema.$defs.metric;
