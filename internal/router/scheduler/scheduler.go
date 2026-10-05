@@ -161,6 +161,8 @@ type HandlerReq struct {
 	Admit      chan error
 	Respond    chan HandlerResp
 	PositionCh chan int
+	// Requester is who sent the request, logged when it starts a swap.
+	Requester swaputil.Requester
 }
 
 // HandlerResp is the routing decision returned to a HandlerReq's caller: either

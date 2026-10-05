@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -2059,5 +2060,59 @@ func TestFIFO_Memory_StaleLeakStopsCountingAsPending(t *testing.T) {
 	assertAdmitted(t, r2)
 	if eff.startsFor("c") != 1 {
 		t.Fatalf("startsFor(c)=%d want 1 once the stale leak cleared", eff.startsFor("c"))
+	}
+}
+
+func TestFIFO_SwapStartLogsRequester(t *testing.T) {
+	eff := newFakeEffects()
+	eff.states["a"] = process.StateStopped
+	eff.states["b"] = process.StateReady
+	eff.states["c"] = process.StateReady
+	var logs bytes.Buffer
+	planner := &stubPlanner{evict: map[string][]string{"a": {"b", "c"}}}
+	s := NewFIFO("test", logmon.NewWriter(&logs), planner, config.FifoConfig{}, nil, 0, 0, eff)
+
+	r := req("a")
+	r.Requester = swaputil.Requester{
+		Client:    "ts:dpeet@github",
+		IP:        "100.104.58.14",
+		Method:    "POST",
+		Path:      "/v1/chat/completions",
+		UserAgent: "opencode/1.18.33 runtime/bun",
+	}
+	s.OnRequest(r)
+
+	if got := eff.startsFor("a"); got != 1 {
+		t.Fatalf("StartSwap calls=%d want 1", got)
+	}
+	line := logs.String()
+	for _, want := range []string{
+		"[INFO] test: swap-start at=",
+		`model="a"`,
+		`evicting="b,c"`,
+		`client="ts:dpeet@github"`,
+		`ip="100.104.58.14"`,
+		`method="POST"`,
+		`path="/v1/chat/completions"`,
+		`ua="opencode/1.18.33 runtime/bun"`,
+	} {
+		if !strings.Contains(line, want) {
+			t.Errorf("log %q missing %q", line, want)
+		}
+	}
+	if strings.Contains(line, "trigger=adopt") {
+		t.Errorf("log %q marks a client request as adopt", line)
+	}
+}
+
+func TestFIFO_SwapStartLineInternalAndAdopt(t *testing.T) {
+	now := time.Date(2026, 10, 4, 2, 59, 52, 0, time.FixedZone("EDT", -4*3600))
+	r := req("a")
+	r.Ctx = swaputil.SetContext(context.Background(), swaputil.ReqContextData{Metadata: map[string]string{"adopt": "1"}})
+
+	got := swapStartLine(now, r, nil)
+	want := `swap-start at=2026-10-04T06:59:52Z model="a" evicting="none" client="internal" ip="" method="" path="" ua="" trigger=adopt`
+	if got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
 	}
 }

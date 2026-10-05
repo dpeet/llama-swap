@@ -1000,6 +1000,7 @@ func (b *baseRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		Admit:      make(chan error, 1),
 		Respond:    make(chan scheduler.HandlerResp),
 		PositionCh: make(chan int, 1),
+		Requester:  swaputil.RequesterFrom(req),
 	}
 
 	select {

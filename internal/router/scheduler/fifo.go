@@ -879,7 +879,31 @@ func (s *FIFO) startSwap(initial HandlerReq, evict, running []string) {
 		cancel:  cancel,
 	}
 	s.planner.OnSwapStart(initial.Model, running)
+	s.logger.Infof("%s: %s", s.name, swapStartLine(time.Now(), initial, evict))
 	s.effects.StartSwap(ctx, initial.Model, evict)
+}
+
+// swapStartLine is the INFO line logged when a request starts a model load, so
+// a surprise eviction can be traced to whoever asked (grep "swap-start"). It
+// carries its own UTC timestamp because the logger's is optional
+// (logTimeFormat) and docker's is lost with the container. Values are quoted
+// so a User-Agent with spaces stays one field.
+func swapStartLine(now time.Time, req HandlerReq, evict []string) string {
+	evicting := "none"
+	if len(evict) > 0 {
+		evicting = strings.Join(evict, ",")
+	}
+	client := req.Requester.Client
+	if client == "" {
+		client = "internal"
+	}
+	line := fmt.Sprintf("swap-start at=%s model=%q evicting=%q client=%q ip=%q method=%q path=%q ua=%q",
+		now.UTC().Format(time.RFC3339), req.Model, evicting, client,
+		req.Requester.IP, req.Requester.Method, req.Requester.Path, req.Requester.UserAgent)
+	if isAdopt(req) {
+		line += " trigger=adopt"
+	}
+	return line
 }
 
 // enqueue inserts req into the queue in priority order: it goes just before the
