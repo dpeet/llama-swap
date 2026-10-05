@@ -30,7 +30,8 @@ type Requester struct {
 // through tailscale serve, which overwrites them; a loopback caller could set
 // them itself.
 func RequesterFrom(r *http.Request) Requester {
-	ip := forwardedIP(r)
+	forwarded := forwardedIP(r)
+	ip := forwarded
 	if ip == "" && r.RemoteAddr != "" {
 		ip = r.RemoteAddr
 		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
@@ -42,7 +43,7 @@ func RequesterFrom(r *http.Request) Requester {
 	switch login := strings.TrimSpace(r.Header.Get("Tailscale-User-Login")); {
 	case login != "":
 		client = "ts:" + login
-	case forwardedIP(r) != "":
+	case forwarded != "":
 		client = "xff:" + ip
 	case ip != "":
 		client = "ip:" + ip

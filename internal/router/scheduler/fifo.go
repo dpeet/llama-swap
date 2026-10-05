@@ -885,9 +885,10 @@ func (s *FIFO) startSwap(initial HandlerReq, evict, running []string) {
 
 // swapStartLine is the INFO line logged when a request starts a model load, so
 // a surprise eviction can be traced to whoever asked (grep "swap-start"). It
-// carries its own UTC timestamp because the logger's is optional
-// (logTimeFormat) and docker's is lost with the container. Values are quoted
-// so a User-Agent with spaces stays one field.
+// also fires for an eviction-only swap (target already Ready, planner evicts
+// others). It carries its own UTC timestamp because the logger's is optional
+// (logTimeFormat) and journalctl prints local time. Values are quoted so a
+// User-Agent with spaces stays one field and a newline cannot forge a line.
 func swapStartLine(now time.Time, req HandlerReq, evict []string) string {
 	evicting := "none"
 	if len(evict) > 0 {

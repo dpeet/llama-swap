@@ -1,6 +1,7 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1807,5 +1808,54 @@ func TestBaseRouter_LeakStaleAfter(t *testing.T) {
 	}
 	if got := b.leakStaleAfter("quick"); got != 60*time.Second {
 		t.Errorf("leakStaleAfter(quick)=%v want the 60s floor", got)
+	}
+}
+
+// lockedBuffer is a bytes.Buffer safe to write from the run loop while the
+// test reads it.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
+
+// TestBaseRouter_SwapStartLogsRequester verifies ServeHTTP hands the caller's
+// identity to the scheduler, so the swap-start line names who asked.
+func TestBaseRouter_SwapStartLogsRequester(t *testing.T) {
+	a := newFakeProcess("a")
+	a.autoReady = true
+	var logs lockedBuffer
+	b, err := newBaseRouter("test", config.Config{HealthCheckTimeout: 5}, map[string]process.Process{"a": a}, logmon.NewWriter(&logs), &stubPlanner{})
+	if err != nil {
+		t.Fatalf("newBaseRouter: %v", err)
+	}
+	go b.run()
+	t.Cleanup(func() { _ = b.Shutdown(time.Second) })
+
+	r := newRequest("a")
+	r.RemoteAddr = "127.0.0.1:51000"
+	r.Header.Set("Tailscale-User-Login", "dpeet@github")
+	r.Header.Set("X-Forwarded-For", "100.104.58.14")
+	r.Header.Set("User-Agent", "opencode/1.18.33")
+	w := httptest.NewRecorder()
+	b.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%q", w.Code, w.Body.String())
+	}
+	want := `model="a" evicting="none" client="ts:dpeet@github" ip="100.104.58.14" method="POST" path="/v1/chat/completions" ua="opencode/1.18.33"`
+	if got := logs.String(); !strings.Contains(got, want) {
+		t.Errorf("log %q missing %q", got, want)
 	}
 }
