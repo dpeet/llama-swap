@@ -91,6 +91,7 @@ func TestProcessCommand_ReadySince(t *testing.T) {
 		Proxy:              fmt.Sprintf("http://127.0.0.1:%d", port),
 		CheckEndpoint:      "/health",
 		HealthCheckTimeout: 10,
+		CmdStop:            testCmdStop,
 	})
 
 	if got := p.Status(); got.State != StateStopped || !got.ReadySince.IsZero() {
