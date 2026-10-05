@@ -8,7 +8,7 @@
 # See artisanal-inference/docs/todo/llama-swap-gb10-fork-patches.md.
 
 # --- stage 1: build the Svelte UI (embedded into the Go binary via embed_ui) ---
-FROM node:22 AS ui-builder
+FROM node:26 AS ui-builder
 WORKDIR /src
 # .npmrc carries legacy-peer-deps=true, required to resolve a vite peer-dep
 # conflict; without it npm ci fails ERESOLVE.
