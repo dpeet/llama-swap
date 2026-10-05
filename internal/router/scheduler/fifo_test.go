@@ -2107,12 +2107,53 @@ func TestFIFO_SwapStartLogsRequester(t *testing.T) {
 
 func TestFIFO_SwapStartLineInternalAndAdopt(t *testing.T) {
 	now := time.Date(2026, 10, 4, 2, 59, 52, 0, time.FixedZone("EDT", -4*3600))
+	// Shaped like Server.adoptModel's request: a bare GET / with no peer.
+	adopt, _ := http.NewRequest(http.MethodGet, "/", nil)
 	r := req("a")
 	r.Ctx = swaputil.SetContext(context.Background(), swaputil.ReqContextData{Metadata: map[string]string{"adopt": "1"}})
+	r.Requester = swaputil.RequesterFrom(adopt)
 
 	got := swapStartLine(now, r, nil)
-	want := `swap-start at=2026-10-04T06:59:52Z model="a" evicting="none" client="internal" ip="" method="" path="" ua="" trigger=adopt`
+	want := `swap-start at=2026-10-04T06:59:52Z model="a" evicting="none" client="internal" ip="" method="GET" path="/" ua="" trigger=adopt`
 	if got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}
+
+// TestFIFO_SwapStartAttributesQueuedRequester verifies a request that waited in
+// the queue is logged under its own requester when drainQueue starts its swap,
+// and that a request joining an in-flight swap logs nothing.
+func TestFIFO_SwapStartAttributesQueuedRequester(t *testing.T) {
+	eff := newFakeEffects()
+	eff.states["a"] = process.StateStopped
+	eff.states["b"] = process.StateStopped
+	var logs bytes.Buffer
+	s := NewFIFO("test", logmon.NewWriter(&logs), &stubPlanner{evict: map[string][]string{"b": {"a"}}}, config.FifoConfig{}, nil, 0, 0, eff)
+
+	from := func(model, client string) HandlerReq {
+		r := req(model)
+		r.Requester = swaputil.Requester{Client: client}
+		return r
+	}
+	s.OnRequest(from("a", "ip:first"))  // StartSwap(a)
+	s.OnRequest(from("a", "ip:joiner")) // joins a's swap
+	s.OnRequest(from("b", "ip:queued")) // collides with a's swap -> queue
+	eff.states["a"] = process.StateReady
+	s.OnSwapDone(SwapDone{ModelID: "a"})
+	s.OnServeDone(ServeDoneEvent{ModelID: "a"})
+	s.OnServeDone(ServeDoneEvent{ModelID: "a"}) // drain -> StartSwap(b)
+
+	if got := eff.startsFor("b"); got != 1 {
+		t.Fatalf("StartSwap(b)=%d want 1", got)
+	}
+	out := logs.String()
+	if n := strings.Count(out, "swap-start"); n != 2 {
+		t.Errorf("swap-start lines=%d want 2:\n%s", n, out)
+	}
+	if strings.Contains(out, "ip:joiner") {
+		t.Errorf("joiner was logged as a swap starter:\n%s", out)
+	}
+	if !strings.Contains(out, `model="b" evicting="a" client="ip:queued"`) {
+		t.Errorf("drained swap not attributed to its own requester:\n%s", out)
 	}
 }
