@@ -2,7 +2,7 @@
 // types, a never-throwing normalizer for catalog.json + measurements.jsonl, and
 // the display aggregates. The aggregates mirror serve/results/resultslib/render.py
 // (format_value) so a number reads the same here as in RESULTS.md; plan:
-// artisanal-inference docs/todo/results-explorer.md.
+// artisanal-inference docs/complete/results-explorer-2026-10.md.
 
 // ---- Types -------------------------------------------------------------------
 
