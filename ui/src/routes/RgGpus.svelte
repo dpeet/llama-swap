@@ -3,7 +3,7 @@
   import { RefreshCw } from "@lucide/svelte";
   import { getRgOverview, grabRg, releaseRg, RgApiError } from "../stores/api";
   import type { RgFamilyChoice, RgGrabResponse, RgHold, RgNode, RgOverview } from "../lib/types";
-  import { canonicalDuration, familyLabel, familyOptions, followTarget, forceReleaseOffered, formatClock, holdByline, holdStatus, holdsUnavailable, idleBadgeShown, parseDuration, refreshDue, rgActionErrorText, advanceIso, elapsedSeconds, timeLeftText, REFRESH_INTERVAL_MS } from "../lib/rg";
+  import { canonicalDuration, familyLabel, familyOptions, followTarget, forceReleaseOffered, formatClock, holdStatus, holdsUnavailable, idleBadgeShown, parseDuration, refreshDue, rgActionErrorText, advanceIso, requestedPhrase, elapsedSeconds, timeLeftText, REFRESH_INTERVAL_MS } from "../lib/rg";
   import RgNodeCard from "../components/RgNodeCard.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
@@ -300,7 +300,7 @@
                 <span class="font-mono text-xs text-muted-foreground">job {hold.job}</span>
                 {#if idleBadgeShown(hold)}<Badge variant="destructive">Idle</Badge>{/if}
               </div>
-              {#if holdByline(hold)}<div class="text-muted-foreground text-xs">Requested by {holdByline(hold)}</div>{/if}
+              {#if requestedPhrase(hold)}<div class="text-muted-foreground text-xs first-letter:uppercase">{requestedPhrase(hold)}</div>{/if}
               <div class="text-muted-foreground">{holdStatus(hold, elapsedS, busyNow)}</div>
               <div class="text-muted-foreground">{servingLine(hold)}</div>
               {#if hold.serving?.error}<div class="text-destructive text-xs">{hold.serving.error}</div>{/if}
@@ -393,8 +393,8 @@
         <Dialog.Description>
           This cancels the Slurm job on {releaseTarget.node}{timeLeftText(releaseTarget.time_left_s, elapsedS)
             ? ` (${timeLeftText(releaseTarget.time_left_s, elapsedS)})`
-            : ""}{releaseTarget.serving ? " and stops the model serving on it" : ""}.{holdByline(releaseTarget)
-            ? ` It was requested by ${holdByline(releaseTarget)}.`
+            : ""}{releaseTarget.serving ? " and stops the model serving on it" : ""}.{requestedPhrase(releaseTarget)
+            ? ` It was ${requestedPhrase(releaseTarget)}.`
             : ""}
         </Dialog.Description>
       </Dialog.Header>

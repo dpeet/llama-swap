@@ -28,6 +28,7 @@ import {
   followTarget,
   holdOwner,
   holdByline,
+  requestedPhrase,
 } from "./rg";
 import type { RgProfile } from "./types";
 
@@ -650,9 +651,16 @@ describe("holdOwner / holdByline", () => {
   });
 
   it("joins whichever of owner and caller are known", () => {
-    expect(holdByline({ requested_by: "ts:SterlingPeet@github", caller: "page" })).toBe("SterlingPeet · page");
-    expect(holdByline({ requested_by: "ip:127.0.0.1", caller: "killfeed" })).toBe("killfeed");
+    expect(holdByline({ requested_by: "ts:SterlingPeet@github", caller: "page" })).toBe("SterlingPeet via page");
+    expect(holdByline({ requested_by: "ip:127.0.0.1", caller: "killfeed" })).toBe("via killfeed");
     expect(holdByline({ requested_by: "ts:dpeet@github", caller: null })).toBe("dpeet");
     expect(holdByline({ requested_by: null, caller: null })).toBeNull();
+  });
+
+  it("phrases the request for a sentence, with 'by' only for a person", () => {
+    expect(requestedPhrase({ requested_by: "ts:dpeet@github", caller: "page" })).toBe("requested by dpeet via page");
+    expect(requestedPhrase({ requested_by: null, caller: "page" })).toBe("requested via page");
+    expect(requestedPhrase({ requested_by: "ts:dpeet@github", caller: null })).toBe("requested by dpeet");
+    expect(requestedPhrase({ requested_by: null, caller: null })).toBeNull();
   });
 });

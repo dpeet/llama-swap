@@ -324,10 +324,18 @@ export function holdOwner(hold: Pick<RgHold, "requested_by">): string | null {
   return (at > 0 ? login.slice(0, at) : login) || null;
 }
 
-/** "SterlingPeet · page", or whichever half is known; null when neither is. */
+/** "SterlingPeet via page", or whichever half is known ("SterlingPeet", "via killfeed"); null when neither is. */
 export function holdByline(hold: Pick<RgHold, "requested_by" | "caller">): string | null {
-  const parts = [holdOwner(hold), hold.caller].filter((part): part is string => !!part);
-  return parts.length > 0 ? parts.join(" · ") : null;
+  const owner = holdOwner(hold);
+  const via = hold.caller ? `via ${hold.caller}` : null;
+  return [owner, via].filter((part): part is string => !!part).join(" ") || null;
+}
+
+/** "requested by SterlingPeet via page" or "requested via page", for a sentence; null when nothing is known. */
+export function requestedPhrase(hold: Pick<RgHold, "requested_by" | "caller">): string | null {
+  const byline = holdByline(hold);
+  if (!byline) return null;
+  return holdOwner(hold) ? `requested by ${byline}` : `requested ${byline}`;
 }
 
 /**
