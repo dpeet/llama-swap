@@ -85,6 +85,39 @@ func TestRGProxy_PostBodyOriginAndContentTypePassThrough(t *testing.T) {
 	}
 }
 
+func TestRGProxy_ForwardsRequesterIdentity(t *testing.T) {
+	var got string
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get(rgClientHeader)
+		w.Write([]byte(`{}`))
+	}))
+	defer backend.Close()
+	s := newRGTestServer(t, backend.URL)
+
+	cases := []struct {
+		name    string
+		headers map[string]string
+		want    string
+	}{
+		{"tailscale login", map[string]string{"Tailscale-User-Login": "dpeet@github"}, "ts:dpeet@github"},
+		// httptest.NewRequest's peer is 192.0.2.1:1234
+		{"peer address", nil, "ip:192.0.2.1"},
+		{"caller-supplied header is replaced", map[string]string{rgClientHeader: "ts:someone@else"}, "ip:192.0.2.1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/rg/overview", nil)
+			for k, v := range tc.headers {
+				req.Header.Set(k, v)
+			}
+			s.ServeHTTP(httptest.NewRecorder(), req)
+			if got != tc.want {
+				t.Errorf("rg-api saw %s %q, want %q", rgClientHeader, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRGProxy_BackendClosedReturns502JSON(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := backend.URL

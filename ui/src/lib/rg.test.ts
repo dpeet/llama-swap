@@ -26,6 +26,8 @@ import {
   busyBadgeLabel,
   nodePopoverDetails,
   followTarget,
+  holdOwner,
+  holdByline,
 } from "./rg";
 import type { RgProfile } from "./types";
 
@@ -552,8 +554,8 @@ describe("nodePopoverDetails", () => {
       free_by: null,
       free_by_complete: false,
     };
-    const rows = nodePopoverDetails(node, busyNow, now, new Set(["1", "3"]));
-    expect(rows.slice(0, 3)).toEqual(["Running: you (hold 1) · ends in ~1 h", "Queued: bob", "Queued: you (hold 3)"]);
+    const rows = nodePopoverDetails(node, busyNow, now, new Map([["1", "SterlingPeet"], ["3", null]]));
+    expect(rows.slice(0, 3)).toEqual(["Running: ours (hold 1 · SterlingPeet) · ends in ~1 h", "Queued: bob", "Queued: ours (hold 3)"]);
   });
 
   it("says nobody else is waiting when only our own jobs are queued on our node", () => {
@@ -563,9 +565,9 @@ describe("nodePopoverDetails", () => {
       free_by: null,
       free_by_complete: false,
     };
-    expect(nodePopoverDetails(node, busyNow, now, new Set(["1", "3"])).slice(0, 3)).toEqual([
-      "Running: you (hold 1) · ends in ~1 h",
-      "Queued: you (hold 3)",
+    expect(nodePopoverDetails(node, busyNow, now, new Map([["1", null], ["3", null]])).slice(0, 3)).toEqual([
+      "Running: ours (hold 1) · ends in ~1 h",
+      "Queued: ours (hold 3)",
       "Nobody else queued for this node by name (partition-wide jobs not shown)",
     ]);
     expect(nodePopoverDetails(node, busyNow, now)).not.toContain("Nobody else queued for this node by name (partition-wide jobs not shown)");
@@ -632,5 +634,25 @@ describe("holdStatus start-by bound", () => {
 
   it("leaves a running hold alone", () => {
     expect(holdStatus({ state: "RUNNING", start, time_left_s: 5400 }, 0, now)).toBe("Running · 1h 30m left");
+  });
+});
+
+describe("holdOwner / holdByline", () => {
+  it("names the Tailscale login without its provider", () => {
+    expect(holdOwner({ requested_by: "ts:SterlingPeet@github" })).toBe("SterlingPeet");
+    expect(holdOwner({ requested_by: "ts:dpeet" })).toBe("dpeet");
+  });
+
+  it("names no one for a loopback service or an unrecorded hold", () => {
+    for (const requested_by of ["ip:127.0.0.1", "xff:100.1.2.3", "ts:", null]) {
+      expect(holdOwner({ requested_by })).toBeNull();
+    }
+  });
+
+  it("joins whichever of owner and caller are known", () => {
+    expect(holdByline({ requested_by: "ts:SterlingPeet@github", caller: "page" })).toBe("SterlingPeet · page");
+    expect(holdByline({ requested_by: "ip:127.0.0.1", caller: "killfeed" })).toBe("killfeed");
+    expect(holdByline({ requested_by: "ts:dpeet@github", caller: null })).toBe("dpeet");
+    expect(holdByline({ requested_by: null, caller: null })).toBeNull();
   });
 });

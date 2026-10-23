@@ -4,7 +4,7 @@
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
-  import { advanceIso, busyBadgeLabel, busyTarget, busyTone, familyLabel, formatClock, holdStatus, nodeDisplayState, nodePopoverDetails, queuedHoldLine, speedCars, type BusyTone, type NodeDisplayState } from "../lib/rg";
+  import { advanceIso, busyBadgeLabel, busyTarget, busyTone, familyLabel, formatClock, holdByline, holdOwner, holdStatus, nodeDisplayState, nodePopoverDetails, queuedHoldLine, speedCars, type BusyTone, type NodeDisplayState } from "../lib/rg";
   import type { RgFamily, RgHold, RgNode } from "../lib/types";
 
   interface Props {
@@ -45,8 +45,8 @@
     free: "Free",
     busy: "Busy",
     queued: "Queued",
-    ours: "Yours",
-    yours: "Yours",
+    ours: "Ours",
+    yours: "Ours",
     unavailable: "Unavailable",
     unknown: "Unknown",
   };
@@ -79,7 +79,7 @@
     orange: "border-transparent bg-orange-500/10 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300",
     yellow: "border-transparent bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-300",
   };
-  // Blue, so "Queued" is neither the teal "Yours" nor one of the busy tones.
+  // Blue, so "Queued" is neither the teal "Ours" nor one of the busy tones.
   const queuedClass = "border-transparent bg-sky-500/10 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300";
   // Null (unknown end) keeps the neutral outline badge.
   let occupantTone = $derived(hasOccupant ? busyTone(target.iso, busyNow) : null);
@@ -94,9 +94,16 @@
   // never opens on a tap; the hover tooltip stays as the desktop shortcut.
   let busyOpen = $state(false);
   // On our own node the same rows answer "is anyone queued behind me?"
-  let ourJobs = $derived(new Set(holds.map((hold) => hold.job)));
+  let ourJobs = $derived(new Map(holds.map((hold) => [hold.job, holdOwner(hold)])));
+  // Who asked for our holds here, for the "Ours" badge's hover title when it opens no rows.
+  let ownersTitle = $derived(
+    holds
+      .map((hold) => holdByline(hold))
+      .filter((line): line is string => line !== null)
+      .join(", ") || undefined,
+  );
   let busyRows = $derived(nodePopoverDetails(node, busyNow, undefined, ourJobs));
-  // The badge that opens busyRows: the occupant's time for busy/queued, "Yours" on our node.
+  // The badge that opens busyRows: the occupant's time for busy/queued, "Ours" on our node.
   let detailBadge = $derived(
     displayState === "busy" || hasOccupant
       ? { text: occupantLabel, variant: "outline" as const, cls: occupantTone ? toneClass[occupantTone] : undefined }
@@ -179,10 +186,10 @@
               {/if}
             </Tooltip.Root>
           {:else}
-            <Badge variant={detailBadge.variant} class={detailBadge.cls}>{detailBadge.text}</Badge>
+            <Badge variant={detailBadge.variant} class={detailBadge.cls} title={ownersTitle}>{detailBadge.text}</Badge>
           {/if}
         {:else if displayState !== "queued"}
-          <Badge variant={badgeVariant[displayState]}>{badgeText[displayState]}</Badge>
+          <Badge variant={badgeVariant[displayState]} title={displayState === "ours" ? ownersTitle : undefined}>{badgeText[displayState]}</Badge>
         {/if}
       </div>
     </div>
@@ -209,7 +216,7 @@
 
     {#each holds as hold (hold.job)}
       <div class="text-xs">
-        Your hold {hold.job}: {hold.state === "PENDING" ? queuedHoldLine(hold, busyNow) : holdStatus(hold, elapsedS)}
+        Hold {hold.job}{holdByline(hold) ? ` (${holdByline(hold)})` : ""}: {hold.state === "PENDING" ? queuedHoldLine(hold, busyNow) : holdStatus(hold, elapsedS)}
       </div>
     {/each}
 

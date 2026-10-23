@@ -26,6 +26,13 @@ const rgAPIURLEnv = "LLAMA_SWAP_RG_API_URL"
 // own limit (not verified).
 const rgResponseHeaderTimeout = 10 * time.Minute
 
+// rgClientHeader carries the requester identity that swap-start logs
+// ("ts:<login>", "xff:<ip>" or "ip:<host>") to rg-api, so a hold records who
+// grabbed it. The proxy derives it rather than relying on rg-api to read
+// Tailscale-User-Login, because rg-api only ever sees llama-swap's loopback
+// peer and ReverseProxy's Rewrite drops X-Forwarded-For.
+const rgClientHeader = "X-Llama-Swap-Client"
+
 // newRGProxy reverse-proxies to rg-api, the host daemon that fronts the Rogues
 // Gallery GPUs. The request path passes through unchanged, so /api/rg/overview
 // here is /api/rg/overview there. Unreachable backends answer 502
@@ -47,6 +54,12 @@ func newRGProxy(target string, logger *logmon.Monitor) (http.Handler, error) {
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(u)
 			r.Out.Host = r.Out.URL.Host
+			// Set always (Del when empty), so a caller can't supply its own.
+			if client := swaputil.RequesterFrom(r.In).Client; client != "" {
+				r.Out.Header.Set(rgClientHeader, client)
+			} else {
+				r.Out.Header.Del(rgClientHeader)
+			}
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			// A cancelled request is not an rg-api failure, so keep it out of

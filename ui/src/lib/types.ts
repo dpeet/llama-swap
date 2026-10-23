@@ -547,6 +547,10 @@ export interface RgHold {
   idle: boolean;
   comment: string;
   serving: RgHoldServing | null;
+  /** Self-reported by the grabbing client: "page", "killfeed", …; null for a hold rg-api didn't place. */
+  caller: string | null;
+  /** rg-api's requester identity ("ts:<login>", "ip:<host>"); null before it was recorded. See holdOwner. */
+  requested_by: string | null;
 }
 
 export interface RgOverview {

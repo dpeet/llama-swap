@@ -190,7 +190,7 @@ export function startByBound(startIso: string | null | undefined, nowIso: string
 }
 
 /**
- * The card's line for a pending hold, after "Your hold <job>: ":
+ * The card's line for a pending hold, after "Hold <job> (<who asked>): ":
  * "queued · start by 14:30 (≤ ~3 h)". `nowIso` is the snapshot time advanced to now.
  */
 export function queuedHoldLine(hold: Pick<RgHold, "start">, nowIso: string | null | undefined): string {
@@ -277,7 +277,7 @@ export function rgActionErrorText(cause: unknown, fallback: string): string {
   const text = typeof message === "string" && message !== "" ? message : fallback;
   const code = (cause as { code?: unknown }).code;
   if (code === "rg_api_unreachable" || cause instanceof TypeError) {
-    return `${text} — the action may still have gone through; check Your holds (refreshed) before trying again.`;
+    return `${text} — the action may still have gone through; check Holds (refreshed) before trying again.`;
   }
   return cause instanceof Error ? cause.message : fallback;
 }
@@ -308,6 +308,29 @@ export function busyTarget(
 }
 
 /**
+ * The person who asked for a hold: the Tailscale login from rg-api's
+ * `requested_by` without its `@provider` (`ts:SterlingPeet@github` →
+ * `SterlingPeet`). Null for `ip:`/`xff:` values (a loopback service such as
+ * the router or a script, not a person) and for holds placed before rg-api
+ * recorded it or outside it. rg-api takes the identity from llama-swap's
+ * /api/rg proxy and trusts any loopback caller, so this is a label for the
+ * people sharing the page, not an audit trail.
+ */
+export function holdOwner(hold: Pick<RgHold, "requested_by">): string | null {
+  const value = hold.requested_by;
+  if (!value?.startsWith("ts:")) return null;
+  const login = value.slice("ts:".length);
+  const at = login.lastIndexOf("@");
+  return (at > 0 ? login.slice(0, at) : login) || null;
+}
+
+/** "SterlingPeet · page", or whichever half is known; null when neither is. */
+export function holdByline(hold: Pick<RgHold, "requested_by" | "caller">): string | null {
+  const parts = [holdOwner(hold), hold.caller].filter((part): part is string => !!part);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/**
  * The hold a grab on this node must queue behind, as rg-hold.sh requires: our
  * pending hold if there is one (it refuses to follow the running one past
  * it), else our started one (RUNNING, or CONFIGURING/SUSPENDED, which rg-hold
@@ -322,16 +345,21 @@ export function followTarget(holds: Pick<RgHold, "job" | "state">[]): string | n
 /**
  * Details for the node's busy/queued/yours popover. Returns one formatted line
  * per job plus a summary of when the node is completely free. A job in
- * `ourJobs` reads "you (hold N)" instead of the Slurm user, so a queue behind
- * our hold is told apart from our own follow-on.
+ * `ourJobs` reads "ours (hold N · <who asked>)" instead of the shared Slurm
+ * user, so a queue behind our hold is told apart from our own follow-on and
+ * the people sharing the account see whose hold it is.
  */
 export function nodePopoverDetails(
   node: Pick<RgNode, "running" | "queue" | "free_by" | "free_by_complete">,
   busyNow: string | undefined,
   now: Date = new Date(),
-  ourJobs: ReadonlySet<string> = new Set(),
+  ourJobs: ReadonlyMap<string, string | null> = new Map(),
 ): string[] {
-  const who = (job: { job: string; user: string }): string => (ourJobs.has(job.job) ? `you (hold ${job.job})` : job.user);
+  const who = (job: { job: string; user: string }): string => {
+    if (!ourJobs.has(job.job)) return job.user;
+    const owner = ourJobs.get(job.job);
+    return `ours (hold ${job.job}${owner ? ` · ${owner}` : ""})`;
+  };
   const rows: string[] = [];
   if (node.running) {
     const endsIn = busyForLabel(node.running.end, busyNow);
@@ -350,7 +378,7 @@ export function nodePopoverDetails(
     if (end && end !== "unknown") text += ` · ends by ${end}`;
     rows.push(text);
   }
-  // On our own node, say plainly when no one else is waiting, because that is what the Yours badge is asked;
+  // On our own node, say plainly when no one else is waiting, because that is what the Ours badge is asked;
   // "by name" because rg-api files only jobs whose ReqNodeList is exactly this node, and a partition-wide
   // pending job can still land here (rg-hold.sh --if-free counts it).
   if (node.running && ourJobs.has(node.running.job) && !(node.queue ?? []).some((q) => !ourJobs.has(q.job))) {
