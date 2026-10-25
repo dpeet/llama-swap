@@ -1,6 +1,6 @@
 // Pure helpers for the RG GPUs page (routes/RgGpus.svelte).
 
-import type { RgAvailability, RgFamilyChoice, RgHold, RgNode } from "./types";
+import type { RgAvailability, RgFamilyChoice, RgHold, RgNode, RgProfile } from "./types";
 
 /** The shortest hold rg-hold accepts; boot alone takes ~6 min. */
 export const MIN_HOLD_MINUTES = 30;
@@ -137,6 +137,25 @@ export function familyOptions(node: Pick<RgNode, "profiles">): RgFamilyOption[] 
   }));
   options.push({ value: "hold-only", label: familyLabels["hold-only"], isDefault: defaultFamily === null });
   return options;
+}
+
+/** Match rg-api: choose GH1's default within each family, else its fastest,
+ * then require that same profile on GH2 before offering a queued GH200 grab. */
+export function nextGh200FamilyOptions(nodes: Pick<RgNode, "name" | "gpu" | "profiles">[]): RgFamilyOption[] {
+  const first = nodes.find((node) => node.name === "rg-uwing-1" && node.gpu === "GH200");
+  const second = nodes.find((node) => node.name === "rg-uwing-2" && node.gpu === "GH200");
+  if (!first || !second) return familyOptions({ profiles: [] });
+
+  const preferred = new Map<RgProfile["family"], RgProfile>();
+  for (const profile of first.profiles) {
+    const current = preferred.get(profile.family);
+    if (!current || (profile.default && !current.default) || (profile.default === current.default && profile.tok_s > current.tok_s)) {
+      preferred.set(profile.family, profile);
+    }
+  }
+  return familyOptions({
+    profiles: [...preferred.values()].filter((profile) => second.profiles.some((peer) => peer.id === profile.id)),
+  });
 }
 
 /**

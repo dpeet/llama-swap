@@ -3,7 +3,7 @@
   import { RefreshCw } from "@lucide/svelte";
   import { getRgOverview, grabRg, releaseRg, RgApiError } from "../stores/api";
   import type { RgFamilyChoice, RgGrabResponse, RgHold, RgNode, RgOverview } from "../lib/types";
-  import { canonicalDuration, familyLabel, familyOptions, followTarget, forceReleaseOffered, formatClock, holdStatus, holdsUnavailable, idleBadgeShown, parseDuration, refreshDue, rgActionErrorText, advanceIso, requestedPhrase, elapsedSeconds, timeLeftText, REFRESH_INTERVAL_MS } from "../lib/rg";
+  import { canonicalDuration, familyLabel, familyOptions, nextGh200FamilyOptions, followTarget, forceReleaseOffered, formatClock, holdStatus, holdsUnavailable, idleBadgeShown, parseDuration, refreshDue, rgActionErrorText, advanceIso, requestedPhrase, elapsedSeconds, timeLeftText, REFRESH_INTERVAL_MS } from "../lib/rg";
   import RgNodeCard from "../components/RgNodeCard.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
@@ -112,7 +112,9 @@
   let selectedNode = $derived<RgNode | null>(overview?.nodes.find((n) => n.name === nodeChoice) ?? null);
   let choiceNodes = $derived(selectedNode ? [selectedNode] : (overview?.nodes ?? []).filter((n) => nodeChoice !== NEXT_GH200 || n.gpu === "GH200"));
   let families = $derived(
-    familyOptions({ profiles: choiceNodes.flatMap((n) => n.profiles) }),
+    nodeChoice === NEXT_GH200
+      ? nextGh200FamilyOptions(overview?.nodes ?? [])
+      : familyOptions({ profiles: choiceNodes.flatMap((n) => n.profiles) }),
   );
 
   function syncFamily(): void {

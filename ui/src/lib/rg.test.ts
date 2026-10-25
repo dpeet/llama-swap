@@ -8,6 +8,7 @@ import {
   formatTimeLeft,
   formatClock,
   familyOptions,
+  nextGh200FamilyOptions,
   familyLabel,
   holdsUnavailable,
   forceReleaseOffered,
@@ -150,6 +151,51 @@ describe("familyOptions", () => {
       { value: "k2-horizon", label: "K2 Horizon MoVA", isDefault: false },
       { value: "hold-only", label: "Hold only", isDefault: false },
     ]);
+  });
+});
+
+describe("nextGh200FamilyOptions", () => {
+  const node = (name: string, profiles: RgProfile[], gpu = "GH200") => ({ name, gpu, profiles });
+  const values = (nodes: Parameters<typeof nextGh200FamilyOptions>[0]) => nextGh200FamilyOptions(nodes).map((option) => option.value);
+
+  it("offers shared profiles but keeps GH1-only K2 Horizon out of next GH200", () => {
+    const shared = profile("swift", "flash-next", true);
+    const gh1 = node("rg-uwing-1", [shared, profile("k2h-gh1", "k2-horizon")]);
+    const gh2 = node("rg-uwing-2", [shared]);
+    const v2 = node("violet2", [profile("k2h-v2", "k2-horizon")], "A100 PCIe");
+    expect(nextGh200FamilyOptions([v2, gh2, gh1])).toEqual([
+      { value: "flash-next", label: "Flash-Next", isDefault: true },
+      { value: "hold-only", label: "Hold only", isDefault: false },
+    ]);
+    expect(familyOptions(gh1).map((option) => option.value)).toContain("k2-horizon");
+    expect(familyOptions(v2).map((option) => option.value)).toContain("k2-horizon");
+    expect(familyOptions({ profiles: [gh1, gh2, v2].flatMap((node) => node.profiles) }).map((option) => option.value)).toContain("k2-horizon");
+  });
+
+  it("requires one shared profile, not different profiles in the same family", () => {
+    expect(values([
+      node("rg-uwing-1", [profile("k2h-gh1", "k2-horizon")]),
+      node("rg-uwing-2", [profile("k2h-gh2", "k2-horizon")]),
+    ])).toEqual(["hold-only"]);
+  });
+
+  it.each([
+    { sharedDefault: false, singleDefault: true, sharedSpeed: 200, singleSpeed: 100, offered: false },
+    { sharedDefault: true, singleDefault: false, sharedSpeed: 100, singleSpeed: 200, offered: true },
+    { sharedDefault: false, singleDefault: false, sharedSpeed: 100, singleSpeed: 200, offered: false },
+    { sharedDefault: false, singleDefault: false, sharedSpeed: 200, singleSpeed: 100, offered: true },
+  ])("checks the backend's preferred GH1 profile: %j", ({ sharedDefault, singleDefault, sharedSpeed, singleSpeed, offered }) => {
+    const shared = { ...profile("shared", "flash-next", sharedDefault), tok_s: sharedSpeed };
+    const single = { ...profile("gh1-only", "flash-next", singleDefault), tok_s: singleSpeed };
+    expect(values([node("rg-uwing-1", [shared, single]), node("rg-uwing-2", [shared])]).includes("flash-next")).toBe(offered);
+  });
+
+  it("requires both named GH200 nodes", () => {
+    const shared = profile("swift", "flash-next", true);
+    const gh1 = node("rg-uwing-1", [shared]);
+    expect(values([gh1])).toEqual(["hold-only"]);
+    expect(values([gh1, node("another-gh200", [shared])])).toEqual(["hold-only"]);
+    expect(values([gh1, node("rg-uwing-2", [shared], "H100 PCIe")])).toEqual(["hold-only"]);
   });
 });
 
