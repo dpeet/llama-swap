@@ -497,7 +497,7 @@ export interface SpeechGenerationRequest {
 // Rogues Gallery GPUs (rg-api, proxied at /api/rg/*). The overview shape is
 // documented in artisanal-inference docs/todo/rg-on-demand.md "rg-api endpoints".
 
-export type RgFamily = "flash-next" | "27b" | "nemotron";
+export type RgFamily = "flash-next" | "27b" | "nemotron" | "k2-horizon";
 export type RgAvailability = "free" | "busy" | "ours" | "unavailable" | "unknown";
 
 export interface RgProfile {

@@ -138,6 +138,18 @@ describe("familyOptions", () => {
     expect(familyLabel("flash-next")).toBe("Flash-Next");
     expect(familyLabel("27b")).toBe("Qwen 27B");
     expect(familyLabel("nemotron")).toBe("Nemotron 3.5 Super VL");
+    expect(familyLabel("k2-horizon")).toBe("K2 Horizon MoVA");
+  });
+
+  it("offers K2 Horizon without changing the node's default family", () => {
+    const options = familyOptions({
+      profiles: [profile("k2h", "k2-horizon"), profile("swift", "flash-next", true)],
+    });
+    expect(options).toEqual([
+      { value: "flash-next", label: "Flash-Next", isDefault: true },
+      { value: "k2-horizon", label: "K2 Horizon MoVA", isDefault: false },
+      { value: "hold-only", label: "Hold only", isDefault: false },
+    ]);
   });
 });
 
