@@ -7,7 +7,6 @@
 // ---- Types -------------------------------------------------------------------
 
 /** Lists the schema enumerates today. Values outside them are kept (the schema grows), only labelled raw. */
-export const FAMILIES = ["flash-next", "27b", "other"] as const;
 export const LANE_STATUSES = ["production", "rollback", "registered", "retired", "a-b", "superseded"] as const;
 /** The comparable harness (plan D5): the page shows only these by default. */
 export const FIXED_HARNESS = "fixed-2026-09-27";

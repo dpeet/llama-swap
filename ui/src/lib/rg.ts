@@ -111,6 +111,7 @@ export interface RgFamilyOption {
 const familyLabels: Record<RgFamilyChoice, string> = {
   "flash-next": "Flash-Next",
   "27b": "Qwen 27B",
+  nemotron: "Nemotron 3.5 Super VL",
   "hold-only": "Hold only",
 };
 

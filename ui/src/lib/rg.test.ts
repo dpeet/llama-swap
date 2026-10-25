@@ -137,6 +137,7 @@ describe("familyOptions", () => {
   it("labels each family", () => {
     expect(familyLabel("flash-next")).toBe("Flash-Next");
     expect(familyLabel("27b")).toBe("Qwen 27B");
+    expect(familyLabel("nemotron")).toBe("Nemotron 3.5 Super VL");
   });
 });
 
