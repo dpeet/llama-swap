@@ -295,8 +295,19 @@ func newGpuTestMonitor(t *testing.T, f *fakeGpuCollector) (*Monitor, chan []GpuS
 	m.gpuStats = f.start
 	m.gpuWait = f.wait
 
-	_, gpuCh, unsub := m.Subscribe()
-	t.Cleanup(unsub)
+	// Register a buffered listener instead of Subscribe's one-slot channel,
+	// because forwardGpuStats drops a sample when a listener is full and the
+	// fake collectors restart without delay, so one collector's sample could
+	// replace the previous one before the test reads it.
+	gpuCh := make(chan []GpuStat, 16)
+	m.mutex.Lock()
+	m.gpuListeners[gpuCh] = struct{}{}
+	m.mutex.Unlock()
+	t.Cleanup(func() {
+		m.mutex.Lock()
+		delete(m.gpuListeners, gpuCh)
+		m.mutex.Unlock()
+	})
 	return m, gpuCh
 }
 
