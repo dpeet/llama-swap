@@ -2,7 +2,7 @@
 
 Use only these technologies:
 
-- Go 1.27+ (`go.mod` pins 1.27.1)
+- Go 1.27+ (`go.mod` pins 1.27.3)
 - TypeScript, Vite and Svelte 5 for the UI (`ui/`)
 - Docker
 - Kubernetes (API, e.g. client-go), only in `cmd/kubeswap`
@@ -13,7 +13,7 @@ Use only these technologies:
 
 ## Testing Changes
 
-- On RSCH-IPAT-D06 there is no host `go`: run Go commands, including `make test-dev` and `make test-all`, in the `golang:1.27` container, and run `make test-ui` and UI builds in `node:26`, per the recipe in `/opt/ai/AGENTS.md`. Keep `simple-responder_*` out of `./build` there, because the `internal/process` ForkedGrandchild tests fail inside the container once it exists.
+- On RSCH-IPAT-D06 there is no host `go`: run Go commands, including `make test-dev` and `make test-all`, in the `golang:1.27` container (run `docker pull golang:1.27` first when `go.mod`'s Go is newer than the cached image, because the image sets `GOTOOLCHAIN=local` and refuses to build), and run `make test-ui` and UI builds in `node:26`, per the recipe in `/opt/ai/AGENTS.md`. Keep `simple-responder_*` out of `./build` there, because the `internal/process` ForkedGrandchild tests fail inside the container once it exists.
 - Name tests by the type under test: `TestProxy_<name>`, `TestProcessGroup_<name>`, etc.
 - Check new tests quickly with `go test -v -run <new tests>`.
 - After changing Go source, run `make test-dev` (short tests; its `staticcheck` step is non-fatal and silently skipped where the tool is absent, as in the `golang:1.27` container); after changing `ui/`, run `make test-ui`; before committing, run `make test-all` (race detector, `./internal/...`).
