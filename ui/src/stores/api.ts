@@ -517,7 +517,7 @@ export class RgApiError extends Error {
 
 async function rgRequest<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(
-    path,
+    apiUrl(path),
     body === undefined
       ? undefined
       : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
@@ -579,7 +579,7 @@ export interface ResultsFiles {
 // isn't the file (an HTML page from a proxy in front would otherwise load as
 // an empty or garbage result set).
 async function resultsRequest(name: "catalog.json" | "measurements.jsonl"): Promise<string> {
-  const response = await fetch(`/api/results/${name}`);
+  const response = await fetch(apiUrl(`/api/results/${name}`));
   const text = await response.text();
   if (!response.ok) {
     let data: Record<string, unknown> | null = null;
