@@ -180,17 +180,20 @@ func TestProcessCommand_LoadingProgressStalls(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := progressUpstream(t, 1000, tt.body)
 			cmd, _ := simpleResponderCmd(t, "-silent")
+			// testCmdStop, because without it the fork's teardown on Windows
+			// force-kills after the graceful window and appends that to the
+			// error, which then no longer ends in wantErr.
 			p := newProcessCommand(t, config.ModelConfig{
 				Cmd:           cmd,
+				CmdStop:       testCmdStop,
 				Proxy:         mock.URL,
 				CheckEndpoint: "/health",
 			})
 
 			// The upstream never becomes ready, so if the health check timeout
 			// did not fire, EnsureReady would end with this context's deadline
-			// error instead. The wait is not timed: after the timeout the
-			// process is torn down, which on Windows takes the full 5s graceful
-			// stop because simple-responder ignores a taskkill without /f.
+			// error instead. The wait is not timed, because the process is torn
+			// down after the timeout.
 			ctx, cancelCtx := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancelCtx()
 			err := p.EnsureReady(ctx, 1500*time.Millisecond)
